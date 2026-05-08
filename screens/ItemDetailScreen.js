@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, Image, ScrollView, FlatList,
-  Dimensions, StyleSheet, ActivityIndicator,
+  Dimensions, StyleSheet, Platform,
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming,
-  withSequence, withRepeat, withDelay, runOnJS, interpolate,
+  withSequence, withRepeat, withDelay, interpolate, Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
 
-// ─── BRAND CONSTANTS ─────────────────────────────────────────────────────────────
+// ─── BRAND CONSTANTS ──────────────────────────────────────────────────────────────
 const COLORS = {
   primary:        '#FFC107',
   primaryDark:    '#FF8F00',
@@ -44,9 +44,9 @@ const COLORS = {
 const SPACING = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 };
 const RADIUS  = { sm: 8, md: 12, lg: 20, xl: 28, full: 999 };
 const SHADOW  = {
-  card:  { shadowColor: '#3D2B00', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
-  float: { shadowColor: '#3D2B00', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.14, shadowRadius: 16, elevation: 8 },
-  subtle: { shadowColor: '#3D2B00', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  card:   { shadowColor: '#3D2B00', shadowOffset: { width: 0, height: 3  }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
+  float:  { shadowColor: '#3D2B00', shadowOffset: { width: 0, height: 6  }, shadowOpacity: 0.14, shadowRadius: 16, elevation: 8 },
+  subtle: { shadowColor: '#3D2B00', shadowOffset: { width: 0, height: 1  }, shadowOpacity: 0.05, shadowRadius: 6,  elevation: 2 },
 };
 const ANIM = {
   spring:     { damping: 16, stiffness: 160 },
@@ -55,115 +55,112 @@ const ANIM = {
   duration:   { fast: 150, normal: 280, slow: 450 },
 };
 
+// ─── GROCERY PRODUCT DATA ─────────────────────────────────────────────────────────
+const GROCERY_PRODUCT = {
+  id: 'gp-001',
+  name: 'Organic Alphonso\nMangoes',
+  nameShort: 'Organic Alphonso Mangoes',
+  subtitle: 'Premium · Hand-picked · Cold-chain Shipped',
+  store: 'Green Basket Farms',
+  brand: 'Konkan Harvest · Maharashtra',
+  category: 'tropical-fruit',
+  price: 22.95,
+  originalPrice: 28.00,
+  discount: 18,
+  images: [
+    'https://imgs.search.brave.com/EZrRzSESzvg2HFhbrCenbfw4_mGDGHbGsNrAKv1Ny28/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMudmVjdGVlenku/Y29tL3N5c3RlbS9y/ZXNvdXJjZXMvdGh1/bWJuYWlscy8wNTAv/NTk0LzgxMS9zbWFs/bC9zaG9wcGluZy1i/YXNrZXQtd2l0aC12/YXJpZXR5LW9mLWdy/b2NlcnktcHJvZHVj/dHMtc2lkZS12aWV3/LWlzb2xhdGUtb24t/dHJhbnNwYXJlbmN5/LWJhY2tncm91bmQt/cG5nLnBuZw',
+    'https://imgs.search.brave.com/oIHC8ueQd4KN_15rUbn2nxlb0G_KFUsPRrnNwbstZlU/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMudmVjdGVlenku/Y29tL3N5c3RlbS9y/ZXNvdXJjZXMvdGh1/bWJuYWlscy8wNTAv/NTk1LzUzNS9zbWFs/bC9zaG9wcGluZy1i/YXNrZXQtd2l0aC12/YXJpZXR5LW9mLWdy/b2NlcnktcHJvZHVj/dHMtaXNvbGF0ZS1v/bi10cmFuc3BhcmVu/Y3ktYmFja2dyb3Vu/ZC1wbmcucG5n',
+    'https://imgs.search.brave.com/oIHC8ueQd4KN_15rUbn2nxlb0G_KFUsPRrnNwbstZlU/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMudmVjdGVlenku/Y29tL3N5c3RlbS9y/ZXNvdXJjZXMvdGh1/bWJuYWlscy8wNTAv/NTk1LzUzNS9zbWFs/bC9zaG9wcGluZy1i/YXNrZXQtd2l0aC12/YXJpZXR5LW9mLWdy/b2NlcnktcHJvZHVj/dHMtaXNvbGF0ZS1v/bi10cmFuc3BhcmVu/Y3ktYmFja2dyb3Vu/ZC1wbmcucG5n',
+    'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=760&q=80',
+  ],
+  thumbnails: [
+    'https://imgs.search.brave.com/EZrRzSESzvg2HFhbrCenbfw4_mGDGHbGsNrAKv1Ny28/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMudmVjdGVlenku/Y29tL3N5c3RlbS9y/ZXNvdXJjZXMvdGh1/bWJuYWlscy8wNTAv/NTk0LzgxMS9zbWFs/bC9zaG9wcGluZy1i/YXNrZXQtd2l0aC12/YXJpZXR5LW9mLWdy/b2NlcnktcHJvZHVj/dHMtc2lkZS12aWV3/LWlzb2xhdGUtb24t/dHJhbnNwYXJlbmN5/LWJhY2tncm91bmQt/cG5nLnBuZw',
+    'https://imgs.search.brave.com/oIHC8ueQd4KN_15rUbn2nxlb0G_KFUsPRrnNwbstZlU/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMudmVjdGVlenku/Y29tL3N5c3RlbS9y/ZXNvdXJjZXMvdGh1/bWJuYWlscy8wNTAv/NTk1LzUzNS9zbWFs/bC9zaG9wcGluZy1i/YXNrZXQtd2l0aC12/YXJpZXR5LW9mLWdy/b2NlcnktcHJvZHVj/dHMtaXNvbGF0ZS1v/bi10cmFuc3BhcmVu/Y3ktYmFja2dyb3Vu/ZC1wbmcucG5n',
+    'https://imgs.search.brave.com/oIHC8ueQd4KN_15rUbn2nxlb0G_KFUsPRrnNwbstZlU/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMudmVjdGVlenku/Y29tL3N5c3RlbS9y/ZXNvdXJjZXMvdGh1/bWJuYWlscy8wNTAv/NTk1LzUzNS9zbWFs/bC9zaG9wcGluZy1i/YXNrZXQtd2l0aC12/YXJpZXR5LW9mLWdy/b2NlcnktcHJvZHVj/dHMtaXNvbGF0ZS1v/bi10cmFuc3BhcmVu/Y3ktYmFja2dyb3Vu/ZC1wbmcucG5n',
+    'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=200&q=70',
+  ],
+  rating: 4.8,
+  reviews: 2341,
+  inStock: true,
+  stock: 47,
+  minQty: 2,
+  certification: '🇮🇳 GI Certified',
+  categoryLabel: '🥭 Tropical Fruit',
+  description: 'Sourced directly from orchards in Ratnagiri, Maharashtra, these GI-certified Alphonso mangoes are the undisputed king of mangoes. Hand-picked at peak ripeness, each mango boasts a rich saffron hue, zero fiber, and an intoxicating aroma that fills a room.',
+  descriptionExtra: 'Perfect for fresh eating, mango lassi, aamras, or desserts. No artificial ripening — what you taste is pure sun-soaked sweetness, arriving in temperature-controlled packaging to ensure peak flavor when it lands on your doorstep.',
+  freshnessChips: [
+    { icon: '🌿', label: 'Organic',   value: 'Certified'    },
+    { icon: '🏷️', label: 'Harvested', value: '3 days ago'   },
+    { icon: '❄️', label: 'Storage',   value: 'Cold-chain'   },
+  ],
+  nutrition: [
+    { label: 'Calories', value: '60',   unit: 'kcal' },
+    { label: 'Protein',  value: '0.8g', unit: null   },
+    { label: 'Carbs',    value: '14g',  unit: null   },
+    { label: 'Vit C',    value: '54%',  unit: null   },
+  ],
+  tags: [
+    { label: '🌱 Vegan',          warn: false },
+    { label: '🚫 Gluten Free',    warn: false },
+    { label: '🍬 No Added Sugar', warn: false },
+    { label: '⚠️ Tree Nut Facility', warn: true },
+  ],
+  delivery: 'Same-day by 9pm',
+  returns:  'Free if not fresh',
+};
+
+const RELATED_PRODUCTS = [
+  { id: 'rp-1', name: 'Seedless', price: 12.50, unit: 'kg',  rating: 4.7, image: 'https://imgs.search.brave.com/oIHC8ueQd4KN_15rUbn2nxlb0G_KFUsPRrnNwbstZlU/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMudmVjdGVlenku/Y29tL3N5c3RlbS9y/ZXNvdXJjZXMvdGh1/bWJuYWlscy8wNTAv/NTk1LzUzNS9zbWFs/bC9zaG9wcGluZy1i/YXNrZXQtd2l0aC12/YXJpZXR5LW9mLWdy/b2NlcnktcHJvZHVj/dHMtaXNvbGF0ZS1v/bi10cmFuc3BhcmVu/Y3ktYmFja2dyb3Vu/ZC1wbmcucG5n' },
+  { id: 'rp-2', name: 'Royal Strawberries',  price: 18.00, unit: 'box', rating: 4.9, image: 'https://images.unsplash.com/photo-1528825871115-3581a5387919?w=300&q=70' },
+  { id: 'rp-3', name: 'Maradol Papaya',       price: 9.75,  unit: 'kg',  rating: 4.6, image: 'https://images.unsplash.com/photo-1519996529931-28324d5a630e?w=300&q=70' },
+  { id: 'rp-4', name: 'Golden Pineapple',     price: 14.50, unit: 'pcs', rating: 4.8, image: 'https://imgs.search.brave.com/EZrRzSESzvg2HFhbrCenbfw4_mGDGHbGsNrAKv1Ny28/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9zdGF0/aWMudmVjdGVlenku/Y29tL3N5c3RlbS9y/ZXNvdXJjZXMvdGh1/bWJuYWlscy8wNTAv/NTk0LzgxMS9zbWFs/bC9zaG9wcGluZy1i/YXNrZXQtd2l0aC12/YXJpZXR5LW9mLWdy/b2NlcnktcHJvZHVj/dHMtc2lkZS12aWV3/LWlzb2xhdGUtb24t/dHJhbnNwYXJlbmN5/LWJhY2tncm91bmQt/cG5nLnBuZw' },
+];
+
+const UNITS = ['Kg', 'Box (3kg)', 'Pcs'];
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────────
-const { width: W, height: H } = Dimensions.get('window');
-const GALLERY_H = W * 0.88;
-
-// Process reviews count and average rating from API
-const processReviews = (reviews) => {
-  if (!reviews || reviews.length === 0) return { avgRating: 0, reviewCount: 0 };
-  const sum = reviews.reduce((acc, rev) => acc + rev.rating, 0);
-  return {
-    avgRating: sum / reviews.length,
-    reviewCount: reviews.length
-  };
-};
-
-// Transform API data to match expected format
-const transformProductData = (apiData) => {
-  const { avgRating, reviewCount } = processReviews(apiData.reviews);
-  
-  return {
-    id: apiData.id.toString(),
-    storeId: 's2',
-    name: apiData.title,
-    store: apiData.brand || 'Glamour Beauty',
-    price: apiData.price,
-    originalPrice: apiData.price / (1 - (apiData.discountPercentage / 100)),
-    discount: Math.round(apiData.discountPercentage),
-    images: apiData.images && apiData.images.length > 0 
-      ? [apiData.images[0], ...apiData.images.slice(1), apiData.thumbnail].filter(Boolean)
-      : ['https://via.placeholder.com/400'],
-    rating: avgRating,
-    reviews: reviewCount,
-    unit: 'Pcs',
-    inStock: apiData.availabilityStatus === 'In Stock' && apiData.stock > 0,
-    stock: apiData.stock,
-    category: apiData.category,
-    description: apiData.description,
-    weight: apiData.weight,
-    dimensions: apiData.dimensions,
-    warrantyInformation: apiData.warrantyInformation,
-    shippingInformation: apiData.shippingInformation,
-    returnPolicy: apiData.returnPolicy,
-    minimumOrderQuantity: apiData.minimumOrderQuantity,
-    tags: apiData.tags,
-    type: apiData.tags ? apiData.tags.join(' · ') : 'Premium Product'
-  };
-};
-
-// Helper function to get nutritional info based on product category
-const getNutritionInfo = (category) => {
-  // This is mock data as the API doesn't provide nutrition info
-  const nutritionMap = {
-    'beauty': [
-      { label: 'Weight', value: '9g' },
-      { label: 'Dimensions', value: '9.26 x 22.47 x 27.67 cm' },
-    ],
-    'default': [
-      { label: 'Weight', value: 'N/A' },
-      { label: 'Dimensions', value: 'N/A' },
-    ]
-  };
-  return nutritionMap[category] || nutritionMap.default;
-};
-
-// Helper function to get allergens (mock as API doesn't provide)
-const getAllergens = (category) => {
-  const allergenMap = {
-    'beauty': ['May contain fragrance allergens'],
-    'default': ['Check product label for allergens']
-  };
-  return allergenMap[category] || allergenMap.default;
-};
-
-const UNITS = ['Pcs', 'Kg', 'Pack'];
+const { width: W } = Dimensions.get('window');
+const GALLERY_H    = W * 0.9;
+const SKELETON_MS  = 2200; // fake loading duration
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────────
-const fmt = (p) => `QAR ${p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmt = (p) =>
+  `QAR ${p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// ─── HOOKS ────────────────────────────────────────────────────────────────────────
 const usePress = () => {
-  const scale = useSharedValue(1);
+  const scale    = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const onPressIn  = () => { scale.value = withSpring(0.95, ANIM.springFast); };
-  const onPressOut = () => { scale.value = withSpring(1,    ANIM.spring); };
+  const onPressIn  = () => { scale.value = withSpring(0.94, ANIM.springFast); };
+  const onPressOut = () => { scale.value = withSpring(1,    ANIM.spring);     };
   return { animStyle, onPressIn, onPressOut };
 };
 
-// Confetti particle
 const useConfetti = () => {
-  const particles = Array.from({ length: 8 }, () => ({
-    x: useSharedValue(0),
-    y: useSharedValue(0),
+  const particles = Array.from({ length: 10 }, () => ({
+    x:       useSharedValue(0),
+    y:       useSharedValue(0),
     opacity: useSharedValue(0),
-    scale: useSharedValue(1),
+    scale:   useSharedValue(1),
+    rotate:  useSharedValue(0),
   }));
 
   const trigger = () => {
-    const angles = [0, 45, 90, 135, 180, 225, 270, 315];
+    const angles = [0, 36, 72, 108, 144, 180, 216, 252, 288, 324];
     particles.forEach((p, i) => {
       const rad  = (angles[i] * Math.PI) / 180;
-      const dist = 60 + Math.random() * 40;
-      p.x.value = 0; p.y.value = 0;
+      const dist = 70 + Math.random() * 50;
+      p.x.value = 0; p.y.value = 0; p.rotate.value = 0;
       p.opacity.value = withSequence(
-        withTiming(1, { duration: 80 }),
-        withTiming(0, { duration: 500 }),
+        withTiming(1, { duration: 60  }),
+        withTiming(0, { duration: 520 }),
       );
-      p.x.value = withTiming(Math.cos(rad) * dist, { duration: 600 });
-      p.y.value = withTiming(Math.sin(rad) * dist, { duration: 600 });
-      p.scale.value = withSequence(
-        withTiming(1.4, { duration: 200 }),
-        withTiming(0,   { duration: 400 }),
+      p.x.value      = withTiming(Math.cos(rad) * dist, { duration: 620 });
+      p.y.value      = withTiming(Math.sin(rad) * dist, { duration: 620 });
+      p.rotate.value = withTiming(360 * (Math.random() > 0.5 ? 1 : -1), { duration: 620 });
+      p.scale.value  = withSequence(
+        withTiming(1.5, { duration: 180 }),
+        withTiming(0,   { duration: 440 }),
       );
     });
   };
@@ -171,63 +168,131 @@ const useConfetti = () => {
   return { particles, trigger };
 };
 
-// ─── SUB-COMPONENTS ───────────────────────────────────────────────────────────────
+// ─── SKELETON LOADER ─────────────────────────────────────────────────────────────
+const SkeletonPulse = ({ style }) => {
+  const opacity = useSharedValue(0.4);
 
-const ConfettiParticle = ({ p, color }) => {
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: p.x.value },
-      { translateY: p.y.value },
-      { scale: p.scale.value },
-    ],
-    opacity: p.opacity.value,
-  }));
-  return <Animated.View style={[confS.particle, { backgroundColor: color }, style]} />;
+  useEffect(() => {
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(1,   { duration: 800, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.4, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      false,
+    );
+  }, []);
+
+  const anim = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return <Animated.View style={[skS.base, style, anim]} />;
 };
 
-const Divider = () => <View style={styles.divider} />;
-
-// ─── INFO BLOCK — replaces accordion ─────────────────────────────────────────────
-const InfoBlock = ({ icon, label, value }) => (
-  <View style={infoS.row}>
-    <View style={infoS.iconWrap}>
-      <Ionicons name={icon} size={15} color={COLORS.textSub} />
+const SkeletonScreen = () => (
+  <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+    {/* gallery */}
+    <SkeletonPulse style={skS.gallery} />
+    {/* thumbnail strip */}
+    <View style={skS.thumbRow}>
+      {[0,1,2,3].map(i => <SkeletonPulse key={i} style={skS.thumb} />)}
     </View>
-    <View style={infoS.textWrap}>
-      <Text style={infoS.label}>{label}</Text>
-      <Text style={infoS.value}>{value}</Text>
+    {/* meta bar */}
+    <View style={skS.row}>
+      <SkeletonPulse style={skS.pill} />
+      <SkeletonPulse style={[skS.pill, { width: 120 }]} />
+    </View>
+    {/* name */}
+    <View style={{ paddingHorizontal: SPACING.md, marginTop: SPACING.sm }}>
+      <SkeletonPulse style={{ height: 36, width: '75%', borderRadius: RADIUS.md }} />
+      <SkeletonPulse style={{ height: 14, width: '45%', borderRadius: RADIUS.sm, marginTop: SPACING.sm }} />
+    </View>
+    {/* rating */}
+    <View style={skS.row}>
+      <SkeletonPulse style={{ height: 14, width: 110, borderRadius: RADIUS.sm }} />
+      <SkeletonPulse style={{ height: 24, width: 80, borderRadius: RADIUS.full, marginLeft: 'auto' }} />
+    </View>
+    {/* price card */}
+    <View style={{ paddingHorizontal: SPACING.md, marginTop: SPACING.sm }}>
+      <SkeletonPulse style={{ height: 86, borderRadius: RADIUS.lg }} />
+    </View>
+    {/* divider */}
+    <View style={skS.divider} />
+    {/* freshness chips */}
+    <View style={{ paddingHorizontal: SPACING.md, marginBottom: SPACING.sm }}>
+      <SkeletonPulse style={{ height: 12, width: 110, borderRadius: 4, marginBottom: SPACING.sm }} />
+    </View>
+    <View style={skS.chipRow}>
+      {[0,1,2].map(i => <SkeletonPulse key={i} style={skS.chip} />)}
+    </View>
+    {/* divider */}
+    <View style={skS.divider} />
+    {/* nutrition */}
+    <View style={{ paddingHorizontal: SPACING.md, marginBottom: SPACING.sm }}>
+      <SkeletonPulse style={{ height: 12, width: 130, borderRadius: 4, marginBottom: SPACING.sm }} />
+    </View>
+    <View style={skS.nutrRow}>
+      {[0,1,2,3].map(i => <SkeletonPulse key={i} style={skS.nutrCell} />)}
+    </View>
+    {/* divider */}
+    <View style={skS.divider} />
+    {/* related */}
+    <View style={{ paddingHorizontal: SPACING.md, marginBottom: SPACING.sm }}>
+      <SkeletonPulse style={{ height: 12, width: 140, borderRadius: 4, marginBottom: SPACING.sm }} />
+    </View>
+    <View style={skS.relRow}>
+      {[0,1,2].map(i => <SkeletonPulse key={i} style={skS.relCard} />)}
     </View>
   </View>
 );
 
+// ─── DIVIDER ──────────────────────────────────────────────────────────────────────
+const Divider = ({ mt = SPACING.md, mb = SPACING.md }) => (
+  <View style={{ height: 1, backgroundColor: COLORS.border, marginTop: mt, marginBottom: mb }} />
+);
+
+// ─── CONFETTI PARTICLE ────────────────────────────────────────────────────────────
+const ConfettiParticle = ({ p, color }) => {
+  const anim = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: p.x.value },
+      { translateY: p.y.value },
+      { scale: p.scale.value },
+      { rotate: `${p.rotate.value}deg` },
+    ],
+    opacity: p.opacity.value,
+  }));
+  return <Animated.View style={[confS.particle, { backgroundColor: color }, anim]} />;
+};
+
+// ─── RELATED CARD ─────────────────────────────────────────────────────────────────
 const RelatedCard = ({ item, onPress, index }) => {
-  const p = usePress();
-  const entranceStyle = useAnimatedStyle(() => ({
-    opacity: withDelay(index * 60, withTiming(1, { duration: ANIM.duration.normal })),
-    transform: [{ translateY: withDelay(index * 60, withSpring(0, ANIM.springSlow)) }],
+  const press = usePress();
+  const entrance = useAnimatedStyle(() => ({
+    opacity: withDelay(index * 70, withTiming(1, { duration: ANIM.duration.normal })),
+    transform: [
+      { translateY: withDelay(index * 70, withSpring(0, ANIM.springSlow)) },
+    ],
   }));
 
   return (
-    <Animated.View style={[{ opacity: 0, transform: [{ translateY: 20 }] }, entranceStyle, p.animStyle]}>
+    <Animated.View style={[{ opacity: 0, transform: [{ translateY: 24 }] }, entrance, press.animStyle]}>
       <TouchableOpacity
         onPress={onPress}
-        onPressIn={p.onPressIn}
-        onPressOut={p.onPressOut}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
         style={relS.card}
         activeOpacity={1}
       >
-        <Image source={{ uri: item.image }} style={relS.img} />
-        <LinearGradient
-          colors={['transparent', 'rgba(61,43,0,0.70)']}
-          style={relS.imgGrad}
-        />
+        <View style={relS.imgWrap}>
+          <Image source={{ uri: item.image }} style={relS.img} resizeMode="cover" />
+          <View style={relS.ratingBadge}>
+            <Ionicons name="star" size={9} color={COLORS.primary} />
+            <Text style={relS.ratingTxt}>{item.rating}</Text>
+          </View>
+        </View>
         <View style={relS.info}>
           <Text style={relS.name} numberOfLines={2}>{item.name}</Text>
-          <View style={relS.ratingRow}>
-            <Ionicons name="star" size={10} color={COLORS.primary} />
-            <Text style={relS.rating}>{item.rating}</Text>
-          </View>
           <Text style={relS.price}>{fmt(item.price)}</Text>
+          <Text style={relS.unit}>/ {item.unit}</Text>
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -236,382 +301,387 @@ const RelatedCard = ({ item, onPress, index }) => {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────────
 export default function ItemDetailScreen({ navigation, route }) {
-  const insets = useSafeAreaInsets();
-  const { addItem } = useCart();
-  
-  const [item, setItem] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [imgIdx, setImgIdx]   = useState(0);
-  const [qty, setQty]         = useState(1);
-  const [activeUnit, setUnit] = useState(UNITS[0]);
-  const [added, setAdded]     = useState(false);
-  const [relatedProducts, setRelatedProducts] = useState([]);
+  const insets       = useSafeAreaInsets();
+  const { addItem }  = useCart();
 
+  // State
+  const [isLoading,  setLoading]  = useState(true);
+  const [imgIdx,     setImgIdx]   = useState(0);
+  const [qty,        setQty]      = useState(GROCERY_PRODUCT.minQty);
+  const [activeUnit, setUnit]     = useState(UNITS[0]);
+  const [expanded,   setExpanded] = useState(false);
+  const [added,      setAdded]    = useState(false);
+
+  const item = GROCERY_PRODUCT;
+
+  // Animations
   const { particles, trigger } = useConfetti();
   const btnScale     = useSharedValue(1);
   const inStockPulse = useSharedValue(1);
-  const cartBarY     = useSharedValue(80);
+  const cartBarY     = useSharedValue(100);
+  const contentFade  = useSharedValue(0);
   const minusPress   = usePress();
   const plusPress    = usePress();
 
-  // Fetch product data
+  // Simulate network fetch → reveal content
   useEffect(() => {
-    const fetchProduct = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('https://dummyjson.com/product/1');
-        if (!response.ok) {
-          throw new Error('Failed to fetch product');
-        }
-        const data = await response.json();
-        const transformedData = transformProductData(data);
-        setItem(transformedData);
-        
-        // Fetch related products (products from same category)
-        if (transformedData.category) {
-          const relatedResponse = await fetch(`https://dummyjson.com/products/category/${transformedData.category}?limit=4`);
-          if (relatedResponse.ok) {
-            const relatedData = await relatedResponse.json();
-            const transformedRelated = relatedData.products
-              .filter(p => p.id !== data.id)
-              .slice(0, 4)
-              .map(p => ({
-                id: p.id.toString(),
-                name: p.title,
-                price: p.price,
-                image: p.thumbnail,
-                rating: p.rating
-              }));
-            setRelatedProducts(transformedRelated);
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching product:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchProduct();
-  }, []);
-
-  useEffect(() => {
-    if (item?.inStock) {
+    const t = setTimeout(() => {
+      setLoading(false);
+      contentFade.value = withTiming(1, { duration: 380 });
+      cartBarY.value    = withSpring(0, ANIM.springSlow);
       inStockPulse.value = withRepeat(
         withSequence(
-          withTiming(1.08, { duration: 700 }),
-          withTiming(1,    { duration: 700 }),
+          withTiming(1.10, { duration: 750 }),
+          withTiming(1,    { duration: 750 }),
         ),
         -1,
         false,
       );
-    }
-    cartBarY.value = withSpring(0, ANIM.spring);
-  }, [item]);
+    }, SKELETON_MS);
+    return () => clearTimeout(t);
+  }, []);
 
-  const inStockStyle = useAnimatedStyle(() => ({ transform: [{ scale: inStockPulse.value }] }));
-  const btnStyle     = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
-  const cartBarStyle = useAnimatedStyle(() => ({ transform: [{ translateY: cartBarY.value }] }));
+  // Animated styles
+  const contentStyle  = useAnimatedStyle(() => ({ opacity: contentFade.value }));
+  const inStockStyle  = useAnimatedStyle(() => ({ transform: [{ scale: inStockPulse.value }] }));
+  const btnStyle      = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
+  const cartBarStyle  = useAnimatedStyle(() => ({ transform: [{ translateY: cartBarY.value }] }));
 
-  const handleAddToCart = () => {
-    if (!item) return;
+  // Handlers
+  const handleAddToCart = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     btnScale.value = withSequence(
-      withSpring(0.92, ANIM.springFast),
+      withSpring(0.91, ANIM.springFast),
       withSpring(1,    ANIM.spring),
     );
     trigger();
-    addItem({ ...item, qty: 1 });
+    addItem({ ...item, qty });
     setAdded(true);
     setTimeout(() => setAdded(false), 1800);
-  };
+  }, [item, qty]);
 
-  const handleDecrement = () => {
+  const handleDecrement = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setQty((q) => Math.max(1, q - 1));
-  };
+    setQty(q => Math.max(item.minQty, q - 1));
+  }, [item.minQty]);
 
-  const handleIncrement = () => {
+  const handleIncrement = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setQty((q) => q + 1);
-  };
-  
-  // Show loading state
-  if (loading) {
-    return (
-      <View style={[styles.root, styles.centerContent]}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={{ marginTop: SPACING.md, color: COLORS.textSub }}>Loading product...</Text>
-      </View>
-    );
-  }
-  
-  // Show error state
-  if (error || !item) {
-    return (
-      <View style={[styles.root, styles.centerContent]}>
-        <Ionicons name="alert-circle-outline" size={48} color={COLORS.error} />
-        <Text style={{ marginTop: SPACING.md, color: COLORS.error, textAlign: 'center' }}>
-          {error || 'Failed to load product'}
-        </Text>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={{ marginTop: SPACING.lg, backgroundColor: COLORS.primary, padding: SPACING.md, borderRadius: RADIUS.md }}
-        >
-          <Text style={{ color: COLORS.text, fontWeight: '600' }}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+    setQty(q => q + 1);
+  }, []);
 
-  const store = route.params?.store || { id: 's1', name: item.store };
-  const images = item.images || [item.image, `${item.image}?2`, `${item.image}?3`];
   const totalPrice = item.price * qty;
-  const nutritionInfo = getNutritionInfo(item.category);
-  const allergens = getAllergens(item.category);
+  const savings    = item.originalPrice - item.price;
 
+  // ── RENDER: skeleton ────────────────────────────────────────────────────────────
+  if (isLoading) return <SkeletonScreen />;
+
+  // ── RENDER: content ─────────────────────────────────────────────────────────────
   return (
     <View style={styles.root}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 180 }}>
+      <Animated.View style={[{ flex: 1 }, contentStyle]}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 190 }}
+        >
 
-        {/* ── Image gallery ─────────────────────────────── */}
-        <View style={styles.galleryWrap}>
-          <Image source={{ uri: images[imgIdx] }} style={styles.galleryBg} blurRadius={24} />
-          <LinearGradient
-            colors={['transparent', 'rgba(61,43,0,0.40)', 'rgba(61,43,0,0.85)']}
-            style={StyleSheet.absoluteFill}
-          />
+          {/* ── GALLERY ──────────────────────────────────── */}
+          <View style={styles.galleryWrap}>
+            {/* Blurred bg */}
+            <Image
+              source={{ uri: item.images[imgIdx] }}
+              style={styles.galleryBg}
+              blurRadius={22}
+            />
+            <LinearGradient
+              colors={['rgba(61,43,0,0.18)', 'rgba(61,43,0,0)', 'rgba(61,43,0,0)', 'rgba(61,43,0,0.72)']}
+              locations={[0, 0.2, 0.55, 1]}
+              style={StyleSheet.absoluteFill}
+            />
 
-          <FlatList
-            data={images}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(_, i) => `img-${i}`}
-            onMomentumScrollEnd={(e) => setImgIdx(Math.round(e.nativeEvent.contentOffset.x / W))}
-            renderItem={({ item: img }) => (
-              <Image source={{ uri: img }} style={styles.galleryImg} resizeMode="cover" />
-            )}
-          />
+            {/* Main image swiper */}
+            <FlatList
+              data={item.images}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(_, i) => `img-${i}`}
+              onMomentumScrollEnd={e => setImgIdx(Math.round(e.nativeEvent.contentOffset.x / W))}
+              renderItem={({ item: img }) => (
+                <Image source={{ uri: img }} style={styles.galleryImg} resizeMode="cover" />
+              )}
+            />
 
-          {/* Dot indicators */}
-          <View style={styles.galleryDots}>
-            {images.map((_, i) => (
-              <View
-                key={i}
-                style={[styles.galleryDot, imgIdx === i && styles.galleryDotActive]}
-              />
-            ))}
-          </View>
+            {/* Top controls */}
+            <SafeAreaView edges={['top']} style={styles.galleryTop}>
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.glassBtn}>
+                <Ionicons name="arrow-back" size={20} color={COLORS.bg} />
+              </TouchableOpacity>
+              <View style={styles.glassTag}>
+                <Text style={styles.glassTagTxt}>{item.categoryLabel}</Text>
+              </View>
+              <TouchableOpacity style={styles.glassBtn}>
+                <Ionicons name="heart-outline" size={20} color={COLORS.bg} />
+              </TouchableOpacity>
+            </SafeAreaView>
 
-          {/* Back + share */}
-          <SafeAreaView edges={['top']} style={styles.galleryBtns}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.glassBtn}>
-              <Ionicons name="arrow-back" size={20} color={COLORS.bg} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.glassBtn}>
-              <Ionicons name="share-outline" size={20} color={COLORS.bg} />
-            </TouchableOpacity>
-          </SafeAreaView>
-
-          {/* Discount badge on image */}
-          {item.discount > 0 && (
-            <View style={styles.galleryDiscBadge}>
-              <Text style={styles.galleryDiscTxt}>{item.discount}% OFF</Text>
-            </View>
-          )}
-        </View>
-
-        {/* ── Main content ──────────────────────────────── */}
-        <View style={styles.content}>
-
-          {/* Store link + stock badge */}
-          <View style={styles.topRow}>
-            <TouchableOpacity style={styles.storePill}>
-              <Ionicons name="storefront-outline" size={13} color={COLORS.textMuted} />
-              <Text style={styles.storeName}>{item.store || store.name}</Text>
-            </TouchableOpacity>
-
-            {item.inStock ? (
-              <Animated.View style={[styles.inStockBadge, inStockStyle]}>
-                <View style={styles.inStockDot} />
-                <Text style={styles.inStockTxt}>In Stock ({item.stock || 0} left)</Text>
-              </Animated.View>
-            ) : (
-              <View style={styles.outOfStockBadge}>
-                <Text style={styles.outTxt}>Out of Stock</Text>
+            {/* Discount badge */}
+            {item.discount > 0 && (
+              <View style={styles.discBadge}>
+                <Text style={styles.discTxt}>{item.discount}% OFF</Text>
               </View>
             )}
-          </View>
 
-          {/* Item name */}
-          <Text style={styles.itemName}>{item.name}</Text>
+            {/* Brand + name overlaid on image */}
+            <View style={styles.galleryBottom}>
+              <Text style={styles.galleryBrand}>{item.brand}</Text>
+              <Text style={styles.galleryName}>{item.name}</Text>
+            </View>
 
-          {/* Rating row */}
-          <View style={styles.ratingRow}>
-            <View style={styles.starsRow}>
-              {[1,2,3,4,5].map((i) => (
-                <Ionicons
-                  key={i}
-                  name={i <= Math.floor(item.rating) ? 'star' : 'star-outline'}
-                  size={14}
-                  color={COLORS.primary}
-                />
+            {/* Dot indicators */}
+            <View style={styles.dots}>
+              {item.images.map((_, i) => (
+                <View key={i} style={[styles.dot, imgIdx === i && styles.dotActive]} />
               ))}
             </View>
-            <Text style={styles.ratingVal}>{item.rating?.toFixed(1)}</Text>
-            <Text style={styles.ratingCount}>({item.reviews} reviews)</Text>
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeTxt}>{item.type || 'Premium'}</Text>
-            </View>
           </View>
 
-          {/* Price row */}
-          <View style={styles.priceCard}>
-            <View style={styles.priceLeft}>
-              {item.originalPrice > item.price && (
-                <Text style={styles.origPrice}>{fmt(item.originalPrice)}</Text>
-              )}
-              <Text style={styles.price}>{fmt(item.price)}</Text>
-            </View>
-            <View style={styles.priceRight}>
-              <Text style={styles.perUnitLabel}>per {activeUnit}</Text>
-            </View>
-          </View>
-
-          <Divider />
-
-          {/* Unit selector */}
-          <Text style={styles.sectionLabel}>Select Unit</Text>
-          <View style={styles.unitRow}>
-            {UNITS.map((u) => (
+          {/* ── THUMBNAIL STRIP ───────────────────────────── */}
+          <View style={styles.thumbStrip}>
+            {item.thumbnails.map((src, i) => (
               <TouchableOpacity
-                key={u}
-                onPress={() => setUnit(u)}
-                style={[styles.unitBtn, activeUnit === u && styles.unitBtnActive]}
+                key={i}
+                onPress={() => setImgIdx(i)}
+                activeOpacity={0.8}
               >
-                {activeUnit === u && (
-                  <Ionicons name="checkmark-circle" size={14} color={COLORS.secondaryDark} style={{ marginRight: SPACING.xs }} />
-                )}
-                <Text style={[styles.unitTxt, activeUnit === u && styles.unitTxtActive]}>{u}</Text>
+                <Image
+                  source={{ uri: src }}
+                  style={[styles.thumb, imgIdx === i && styles.thumbActive]}
+                  resizeMode="cover"
+                />
               </TouchableOpacity>
             ))}
           </View>
 
-          <Divider />
+          {/* ── CONTENT BODY ──────────────────────────────── */}
+          <View style={styles.body}>
 
-          {/* Description */}
-          <Text style={styles.sectionLabel}>About this item</Text>
-          <Text style={styles.desc}>{item.description}</Text>
+            {/* Store + stock row */}
+            <View style={styles.metaBar}>
+              <TouchableOpacity style={styles.storePill}>
+                <View style={styles.storeDot} />
+                <Text style={styles.storeName}>{item.store}</Text>
+              </TouchableOpacity>
 
-          <Divider />
-
-          {/* ── Nutrition — flat text, no accordion ──────── */}
-          <View style={flatS.block}>
-            <View style={flatS.labelRow}>
-              <Ionicons name="leaf-outline" size={16} color={COLORS.textSub} />
-              <Text style={flatS.sectionTitle}>Product Details</Text>
-            </View>
-            <View style={flatS.pillsRow}>
-              {nutritionInfo.map((n) => (
-                <View key={n.label} style={flatS.pill}>
-                  <Text style={flatS.pillValue}>{n.value}</Text>
-                  <Text style={flatS.pillLabel}>{n.label}</Text>
+              {item.inStock ? (
+                <Animated.View style={[styles.stockBadge, inStockStyle]}>
+                  <View style={styles.pulseDot} />
+                  <Text style={styles.stockTxt}>In Stock · {item.stock} left</Text>
+                </Animated.View>
+              ) : (
+                <View style={styles.outBadge}>
+                  <Text style={styles.outTxt}>Out of Stock</Text>
                 </View>
-              ))}
+              )}
             </View>
-          </View>
 
-          {/* ── Allergens / Additional Info — flat text, no accordion ──────── */}
-          <View style={flatS.block}>
-            <View style={flatS.labelRow}>
-              <Ionicons name="warning-outline" size={16} color={COLORS.warning} />
-              <Text style={flatS.sectionTitle}>Additional Information</Text>
+            {/* Name + subtitle */}
+            <View style={styles.nameBlock}>
+              <Text style={styles.itemName}>{item.nameShort}</Text>
+              <Text style={styles.itemSubtitle}>{item.subtitle}</Text>
             </View>
-            <View style={flatS.allergenRow}>
-              {allergens.map((a) => (
-                <View key={a} style={flatS.allergenChip}>
-                  <Text style={flatS.allergenTxt}>{a}</Text>
-                </View>
-              ))}
-            </View>
-            {item.warrantyInformation && (
-              <Text style={flatS.additionalText}>Warranty: {item.warrantyInformation}</Text>
-            )}
-            {item.shippingInformation && (
-              <Text style={flatS.additionalText}>Shipping: {item.shippingInformation}</Text>
-            )}
-            {item.returnPolicy && (
-              <Text style={flatS.additionalText}>Return Policy: {item.returnPolicy}</Text>
-            )}
-            {item.minimumOrderQuantity && (
-              <Text style={flatS.additionalText}>Minimum Order: {item.minimumOrderQuantity} units</Text>
-            )}
-          </View>
 
-          {/* Related items */}
-          {relatedProducts.length > 0 && (
-            <>
-              <Text style={[styles.sectionLabel, { marginTop: SPACING.xs }]}>You May Also Like</Text>
-              <FlatList
-                data={relatedProducts}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={(i) => i.id}
-                contentContainerStyle={{ gap: SPACING.sm }}
-                renderItem={({ item: r, index }) => (
-                  <RelatedCard 
-                    item={r} 
-                    index={index} 
-                    onPress={() => navigation.push('ItemDetail', { item: r })}
+            {/* Rating row */}
+            <View style={styles.ratingRow}>
+              <View style={styles.starsRow}>
+                {[1,2,3,4,5].map(i => (
+                  <Ionicons
+                    key={i}
+                    name={i <= Math.floor(item.rating) ? 'star' : i - 0.5 <= item.rating ? 'star-half' : 'star-outline'}
+                    size={14}
+                    color={COLORS.primary}
                   />
-                )}
-              />
-            </>
-          )}
-        </View>
-      </ScrollView>
+                ))}
+              </View>
+              <Text style={styles.ratingNum}>{item.rating.toFixed(1)}</Text>
+              <Text style={styles.ratingCount}>({item.reviews.toLocaleString()} reviews)</Text>
+              <View style={styles.certPill}>
+                <Text style={styles.certTxt}>{item.certification}</Text>
+              </View>
+            </View>
 
-      {/* ── Confetti overlay ──────────────────────────── */}
+            {/* Price ribbon */}
+            <View style={styles.priceRibbon}>
+              <View>
+                <Text style={styles.origPrice}>{fmt(item.originalPrice)}</Text>
+                <Text style={styles.price}>{fmt(item.price)}</Text>
+                <View style={styles.saveBadge}>
+                  <Text style={styles.saveTxt}>You save {fmt(savings)} 🎉</Text>
+                </View>
+              </View>
+              <View style={styles.priceRight}>
+                <Text style={styles.perUnit}>per {activeUnit}</Text>
+                <View style={styles.totalPill}>
+                  <Text style={styles.totalPillTxt}>📦 {fmt(totalPrice)}</Text>
+                </View>
+              </View>
+            </View>
+
+            <Divider />
+
+            {/* Unit selector */}
+            <Text style={styles.secLabel}>Select Unit</Text>
+            <View style={styles.unitRow}>
+              {UNITS.map(u => (
+                <TouchableOpacity
+                  key={u}
+                  onPress={() => setUnit(u)}
+                  style={[styles.unitBtn, activeUnit === u && styles.unitBtnActive]}
+                  activeOpacity={0.8}
+                >
+                  {activeUnit === u && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={14}
+                      color={COLORS.secondaryDark}
+                      style={{ marginRight: SPACING.xs }}
+                    />
+                  )}
+                  <Text style={[styles.unitTxt, activeUnit === u && styles.unitTxtActive]}>{u}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Divider />
+
+            {/* Freshness facts */}
+            <Text style={styles.secLabel}>Freshness Facts</Text>
+            <View style={styles.freshRow}>
+              {item.freshnessChips.map((chip, i) => (
+                <View key={i} style={styles.freshChip}>
+                  <Text style={styles.freshIcon}>{chip.icon}</Text>
+                  <View>
+                    <Text style={styles.freshLabel}>{chip.label}</Text>
+                    <Text style={styles.freshVal}>{chip.value}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <Divider />
+
+            {/* Description */}
+            <Text style={styles.secLabel}>About this item</Text>
+            <Text style={styles.desc}>{item.description}</Text>
+            {!expanded ? (
+              <TouchableOpacity onPress={() => setExpanded(true)} activeOpacity={0.7}>
+                <Text style={styles.readMore}>Read more ›</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={[styles.desc, { marginTop: SPACING.sm }]}>{item.descriptionExtra}</Text>
+            )}
+
+            <Divider />
+
+            {/* Nutrition grid */}
+            <Text style={styles.secLabel}>Nutrition per 100g</Text>
+            <View style={styles.nutrGrid}>
+              {item.nutrition.map((n, i) => (
+                <View key={i} style={styles.nutrCell}>
+                  <Text style={styles.nutrVal}>{n.value}</Text>
+                  {n.unit && <Text style={styles.nutrUnit}>{n.unit}</Text>}
+                  <Text style={styles.nutrLabel}>{n.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            <Divider />
+
+            {/* Tags */}
+            <Text style={styles.secLabel}>Labels & Alerts</Text>
+            <View style={styles.tagsRow}>
+              {item.tags.map((tag, i) => (
+                <View key={i} style={[styles.tag, tag.warn && styles.tagWarn]}>
+                  <Text style={[styles.tagTxt, tag.warn && styles.tagTxtWarn]}>{tag.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Delivery & returns */}
+            <View style={styles.infoTiles}>
+              <View style={styles.infoTile}>
+                <Text style={styles.infoTileIcon}>🚚</Text>
+                <View>
+                  <Text style={styles.infoTileLabel}>Delivery</Text>
+                  <Text style={styles.infoTileVal}>{item.delivery}</Text>
+                </View>
+              </View>
+              <View style={styles.infoTile}>
+                <Text style={styles.infoTileIcon}>↩️</Text>
+                <View>
+                  <Text style={styles.infoTileLabel}>Returns</Text>
+                  <Text style={styles.infoTileVal}>{item.returns}</Text>
+                </View>
+              </View>
+            </View>
+
+            <Divider />
+
+            {/* Related */}
+            <Text style={styles.secLabel}>You May Also Like</Text>
+            <FlatList
+              data={RELATED_PRODUCTS}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={r => r.id}
+              contentContainerStyle={{ paddingHorizontal: SPACING.md, gap: SPACING.sm }}
+              renderItem={({ item: r, index }) => (
+                <RelatedCard
+                  item={r}
+                  index={index}
+                  onPress={() => navigation.push('ItemDetail', { item: r })}
+                />
+              )}
+            />
+
+          </View>
+        </ScrollView>
+      </Animated.View>
+
+      {/* ── CONFETTI ──────────────────────────────────────── */}
       <View style={confS.container} pointerEvents="none">
         {particles.map((p, i) => (
           <ConfettiParticle
             key={i}
             p={p}
-            color={i % 2 === 0 ? COLORS.primary : COLORS.secondary}
+            color={[COLORS.primary, COLORS.secondary, COLORS.primaryDark, COLORS.secondaryDark][i % 4]}
           />
         ))}
       </View>
 
-      {/* ── Floating bottom bar — redesigned ─────────── */}
-      <Animated.View style={[btmS.wrapper, { paddingBottom: 50 }, cartBarStyle]}>
-        {/* Fade scrim above bar */}
+      {/* ── BOTTOM BAR ────────────────────────────────────── */}
+      <Animated.View style={[btmS.wrapper, { paddingBottom: insets.bottom + SPACING.md }, cartBarStyle]}>
         <LinearGradient
           colors={['rgba(250,247,242,0)', 'rgba(250,247,242,0.98)']}
           style={btmS.scrim}
           pointerEvents="none"
         />
-
         <View style={btmS.card}>
-          {/* Left — qty stepper */}
+
+          {/* Qty stepper */}
           <View style={btmS.stepperBlock}>
-            <Text style={btmS.stepperHeading}>Qty</Text>
+            <Text style={btmS.stepperLbl}>Qty</Text>
             <View style={btmS.stepper}>
+
               <Animated.View style={minusPress.animStyle}>
                 <TouchableOpacity
                   onPress={handleDecrement}
                   onPressIn={minusPress.onPressIn}
                   onPressOut={minusPress.onPressOut}
-                  style={[btmS.stepTap, qty <= 1 && btmS.stepTapDisabled]}
+                  style={[btmS.stepBtn, btmS.stepMinus, qty <= item.minQty && btmS.stepDisabled]}
                   activeOpacity={1}
                 >
-                  <Ionicons
-                    name="remove"
-                    size={18}
-                    color={qty <= 1 ? COLORS.textMuted : COLORS.text}
-                  />
+                  <Ionicons name="remove" size={18} color={qty <= item.minQty ? COLORS.textMuted : COLORS.text} />
                 </TouchableOpacity>
               </Animated.View>
 
@@ -624,38 +694,43 @@ export default function ItemDetailScreen({ navigation, route }) {
                   onPress={handleIncrement}
                   onPressIn={plusPress.onPressIn}
                   onPressOut={plusPress.onPressOut}
-                  style={btmS.stepTapPlus}
+                  style={[btmS.stepBtn, btmS.stepPlus]}
                   activeOpacity={1}
                 >
-                  <Ionicons name="add" size={18} color={COLORS.text} />
+                  <Ionicons name="add" size={18} color={COLORS.dark} />
                 </TouchableOpacity>
               </Animated.View>
+
             </View>
           </View>
 
           {/* Vertical rule */}
           <View style={btmS.vRule} />
 
-          {/* Right — total + CTA */}
+          {/* Total + CTA */}
           <View style={btmS.ctaBlock}>
             <View style={btmS.totalRow}>
-              <Text style={btmS.totalLabel}>Total</Text>
+              <Text style={btmS.totalLbl}>Total</Text>
               <Text style={btmS.totalAmt}>{fmt(totalPrice)}</Text>
             </View>
 
             <Animated.View style={btnStyle}>
               <TouchableOpacity
                 onPress={handleAddToCart}
-                onPressIn={() => { btnScale.value = withSpring(0.96, ANIM.springFast); }}
-                onPressOut={() => { btnScale.value = withSpring(1,    ANIM.spring); }}
+                onPressIn={() => { btnScale.value = withSpring(0.95, ANIM.springFast); }}
+                onPressOut={() => { btnScale.value = withSpring(1,    ANIM.spring);     }}
                 activeOpacity={1}
                 disabled={!item.inStock}
-                style={[btmS.addBtn, added && btmS.addBtnSuccess, !item.inStock && btmS.addBtnDisabled]}
+                style={[
+                  btmS.addBtn,
+                  added && btmS.addBtnSuccess,
+                  !item.inStock && btmS.addBtnDisabled,
+                ]}
               >
                 <Ionicons
                   name={added ? 'checkmark-circle-outline' : 'bag-add-outline'}
                   size={20}
-                  color={added ? COLORS.surface : COLORS.text}
+                  color={added ? COLORS.surface : COLORS.dark}
                 />
                 <Text style={[btmS.addBtnTxt, added && btmS.addBtnTxtSuccess]}>
                   {added ? 'Added!' : 'Add to Cart'}
@@ -663,109 +738,161 @@ export default function ItemDetailScreen({ navigation, route }) {
               </TouchableOpacity>
             </Animated.View>
           </View>
+
         </View>
       </Animated.View>
     </View>
   );
 }
 
+// ─── SKELETON STYLES ──────────────────────────────────────────────────────────────
+const skS = StyleSheet.create({
+  base:    { backgroundColor: '#EDE5D0', borderRadius: RADIUS.md },
+  gallery: { height: W * 0.9, borderRadius: 0 },
+  thumbRow: {
+    flexDirection: 'row', gap: SPACING.sm,
+    padding: SPACING.md, backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+  },
+  thumb:   { width: 56, height: 56, borderRadius: RADIUS.sm },
+  row:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, marginTop: SPACING.md, gap: SPACING.sm },
+  pill:    { height: 28, width: 100, borderRadius: RADIUS.full },
+  divider: { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.md },
+  chipRow: { flexDirection: 'row', gap: SPACING.sm, paddingHorizontal: SPACING.md },
+  chip:    { flex: 1, height: 60, borderRadius: RADIUS.md },
+  nutrRow: { flexDirection: 'row', gap: SPACING.sm, paddingHorizontal: SPACING.md },
+  nutrCell:{ flex: 1, height: 62, borderRadius: RADIUS.md },
+  relRow:  { flexDirection: 'row', gap: SPACING.sm, paddingHorizontal: SPACING.md },
+  relCard: { width: 130, height: 162, borderRadius: RADIUS.lg },
+});
+
 // ─── MAIN STYLES ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
-  centerContent: { justifyContent: 'center', alignItems: 'center' },
 
   // Gallery
-  galleryWrap: { height: GALLERY_H, position: 'relative', overflow: 'hidden', backgroundColor: COLORS.dark },
-  galleryBg:   { position: 'absolute', width: '100%', height: '100%', opacity: 0.25 },
-  galleryImg:  { width: W, height: GALLERY_H },
-  galleryDots: {
-    position: 'absolute', bottom: SPACING.md, alignSelf: 'center',
-    flexDirection: 'row', gap: SPACING.xs,
-  },
-  galleryDot: {
-    width: SPACING.sm - 2, height: SPACING.sm - 2,
-    borderRadius: RADIUS.full, backgroundColor: 'rgba(250,247,242,0.35)',
-  },
-  galleryDotActive: { width: SPACING.lg, backgroundColor: COLORS.secondary },
-  galleryBtns: {
+  galleryWrap:  { height: W * 0.9, position: 'relative', overflow: 'hidden', backgroundColor: COLORS.dark },
+  galleryBg:    { position: 'absolute', width: '100%', height: '100%', opacity: 0.28 },
+  galleryImg:   { width: W, height: W * 0.9 },
+  galleryTop:   {
     position: 'absolute', top: 0, left: 0, right: 0,
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md, paddingTop: SPACING.xs,
   },
   glassBtn: {
     width: 40, height: 40, borderRadius: RADIUS.full,
-    backgroundColor: 'rgba(28,26,16,0.50)',
-    borderWidth: 1, borderColor: 'rgba(250,247,242,0.16)',
+    backgroundColor: 'rgba(28,26,16,0.52)',
+    borderWidth: 1, borderColor: 'rgba(250,247,242,0.18)',
     alignItems: 'center', justifyContent: 'center',
   },
-  galleryDiscBadge: {
-    position: 'absolute', top: SPACING.xxl + SPACING.sm,
-    right: SPACING.md,
-    backgroundColor: COLORS.warning,
-    paddingHorizontal: SPACING.sm + SPACING.xs,
-    paddingVertical: SPACING.xs + 2,
-    borderRadius: RADIUS.full,
+  glassTag: {
+    backgroundColor: 'rgba(28,26,16,0.52)',
+    borderWidth: 1, borderColor: 'rgba(250,247,242,0.18)',
+    borderRadius: RADIUS.full, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 2,
   },
-  galleryDiscTxt: { color: COLORS.surface, fontSize: 12, fontWeight: '800' },
+  glassTagTxt: { color: COLORS.bg, fontSize: 12, fontWeight: '600' },
+  discBadge: {
+    position: 'absolute', bottom: 10, right: SPACING.md,
+    backgroundColor: COLORS.warning, borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm + SPACING.xs, paddingVertical: SPACING.xs + 2,
+  },
+  discTxt:     { color: COLORS.surface, fontSize: 12, fontWeight: '800' },
+  galleryBottom: {
+    position: 'absolute', bottom: SPACING.xl, left: SPACING.md, right: SPACING.md,
+  },
+  galleryBrand: {
+    color: 'rgba(250,247,242,0.82)', fontSize: 13, fontWeight: '400',
+    fontStyle: 'italic', marginBottom: 4,
+  },
+  galleryName: {
+    color: '#FFFFFF', fontSize: 24, fontWeight: '800',
+    lineHeight: 30,
+    textShadowColor: 'rgba(61,43,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6,
+  },
+  dots: {
+    position: 'absolute', bottom: SPACING.sm, alignSelf: 'center',
+    flexDirection: 'row', gap: SPACING.xs,
+  },
+  dot:       { width: 6, height: 6, borderRadius: RADIUS.full, backgroundColor: 'rgba(250,247,242,0.38)' },
+  dotActive: { width: SPACING.lg, backgroundColor: COLORS.secondary },
 
-  // Content
-  content: {
-    paddingHorizontal: SPACING.md, paddingTop: SPACING.lg,
-    paddingBottom: SPACING.sm, gap: SPACING.md,
-    backgroundColor: COLORS.bg,
+  // Thumbnail strip
+  thumbStrip: {
+    flexDirection: 'row', gap: SPACING.sm,
+    padding: SPACING.md, backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  thumb:       { width: 56, height: 56, borderRadius: RADIUS.sm, borderWidth: 2, borderColor: 'transparent' },
+  thumbActive: { borderColor: COLORS.primaryDark },
+
+  // Body
+  body: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, gap: SPACING.sm },
+
+  // Meta bar
+  metaBar:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   storePill: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.xs,
-    backgroundColor: COLORS.surfaceAlt, paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs + 2, borderRadius: RADIUS.full,
-    borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: RADIUS.full, paddingHorizontal: SPACING.sm + SPACING.xs, paddingVertical: SPACING.xs + 2,
   },
+  storeDot:  { width: 7, height: 7, borderRadius: RADIUS.full, backgroundColor: COLORS.secondary },
   storeName: { color: COLORS.textSub, fontSize: 12, fontWeight: '600' },
-
-  inStockBadge: {
+  stockBadge:{
     flexDirection: 'row', alignItems: 'center', gap: SPACING.xs,
-    backgroundColor: COLORS.successLight, paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs, borderRadius: RADIUS.full,
+    backgroundColor: COLORS.successLight, borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm + SPACING.xs, paddingVertical: SPACING.xs + 2,
   },
-  inStockDot: { width: 7, height: 7, borderRadius: RADIUS.full, backgroundColor: COLORS.success },
-  inStockTxt: { color: COLORS.success, fontSize: 12, fontWeight: '700' },
-  outOfStockBadge: {
-    paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs,
-    borderRadius: RADIUS.full, backgroundColor: COLORS.errorLight,
-  },
-  outTxt: { color: COLORS.error, fontSize: 12, fontWeight: '700' },
+  pulseDot:  { width: 7, height: 7, borderRadius: RADIUS.full, backgroundColor: COLORS.success },
+  stockTxt:  { color: COLORS.success, fontSize: 12, fontWeight: '700' },
+  outBadge:  { backgroundColor: COLORS.errorLight, borderRadius: RADIUS.full, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs },
+  outTxt:    { color: COLORS.error, fontSize: 12, fontWeight: '700' },
 
-  itemName: { color: COLORS.text, fontSize: 26, fontWeight: '900', lineHeight: 32 },
+  // Name block
+  nameBlock:    {},
+  itemName:     { color: COLORS.text, fontSize: 26, fontWeight: '900', lineHeight: 32 },
+  itemSubtitle: { color: COLORS.textMuted, fontSize: 13, fontWeight: '500', marginTop: 4 },
 
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flexWrap: 'wrap' },
-  starsRow:  { flexDirection: 'row', gap: 2 },
-  ratingVal:   { color: COLORS.text, fontSize: 14, fontWeight: '700' },
+  // Rating
+  ratingRow:   { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flexWrap: 'wrap' },
+  starsRow:    { flexDirection: 'row', gap: 2 },
+  ratingNum:   { color: COLORS.text, fontSize: 14, fontWeight: '700' },
   ratingCount: { color: COLORS.textMuted, fontSize: 13 },
-  typeBadge: {
-    marginLeft: 'auto', backgroundColor: COLORS.surfaceAlt,
-    paddingHorizontal: SPACING.sm + SPACING.xs, paddingVertical: SPACING.xs,
-    borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border,
+  certPill: {
+    marginLeft: 'auto', backgroundColor: COLORS.primaryLight,
+    borderWidth: 1, borderColor: '#FFE082',
+    borderRadius: RADIUS.full, paddingHorizontal: SPACING.sm + SPACING.xs, paddingVertical: SPACING.xs,
   },
-  typeTxt: { color: COLORS.textSub, fontSize: 11, fontWeight: '600' },
+  certTxt: { color: COLORS.secondaryDark, fontSize: 11, fontWeight: '600' },
 
-  priceCard: {
-    flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between',
+  // Price ribbon
+  priceRibbon: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
     backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
     borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.md,
     ...SHADOW.subtle,
   },
-  priceLeft:    { gap: 2 },
-  priceRight:   { alignItems: 'flex-end' },
-  origPrice:    { color: COLORS.textMuted, fontSize: 13, textDecorationLine: 'line-through' },
-  price:        { color: COLORS.textSub, fontSize: 30, fontWeight: '900' },
-  perUnitLabel: { color: COLORS.textMuted, fontSize: 12, fontWeight: '500' },
+  origPrice: { color: COLORS.textMuted, fontSize: 13, textDecorationLine: 'line-through' },
+  price:     { color: COLORS.secondaryDark, fontSize: 32, fontWeight: '900', lineHeight: 36 },
+  saveBadge: {
+    marginTop: SPACING.xs, alignSelf: 'flex-start',
+    backgroundColor: COLORS.successLight, borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm + SPACING.xs, paddingVertical: 3,
+  },
+  saveTxt:  { color: COLORS.success, fontSize: 11, fontWeight: '700' },
+  priceRight: { alignItems: 'flex-end', gap: SPACING.xs },
+  perUnit:    { color: COLORS.textMuted, fontSize: 12, fontWeight: '500' },
+  totalPill: {
+    backgroundColor: COLORS.primaryLight, borderRadius: RADIUS.full,
+    borderWidth: 1, borderColor: '#FFE082',
+    paddingHorizontal: SPACING.sm + SPACING.xs, paddingVertical: SPACING.xs + 2,
+  },
+  totalPillTxt: { color: COLORS.secondaryDark, fontSize: 13, fontWeight: '700' },
 
-  divider: { height: 1, backgroundColor: COLORS.border },
+  // Section label
+  secLabel: { color: COLORS.text, fontSize: 14, fontWeight: '800', letterSpacing: 0.2 },
 
-  sectionLabel: { color: COLORS.text, fontSize: 15, fontWeight: '800' },
-
+  // Unit selector
   unitRow: { flexDirection: 'row', gap: SPACING.sm },
   unitBtn: {
     flexDirection: 'row', alignItems: 'center',
@@ -780,97 +907,90 @@ const styles = StyleSheet.create({
   unitTxt:       { color: COLORS.textMuted, fontSize: 14, fontWeight: '600' },
   unitTxtActive: { color: COLORS.secondaryDark },
 
-  desc: { color: COLORS.textMuted, fontSize: 14, lineHeight: 22 },
-});
-
-// ─── INFO BLOCK STYLES ────────────────────────────────────────────────────────────
-const infoS = StyleSheet.create({
-  row: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm,
-    paddingVertical: SPACING.sm,
-  },
-  iconWrap: {
-    width: 32, height: 32, borderRadius: RADIUS.md,
-    backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border,
-    alignItems: 'center', justifyContent: 'center',
-    marginTop: 2,
-  },
-  textWrap: { flex: 1 },
-  label:    { color: COLORS.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 2 },
-  value:    { color: COLORS.text, fontSize: 14, lineHeight: 21 },
-});
-
-// ─── FLAT SECTION STYLES (replaces accordion) ─────────────────────────────────────
-const flatS = StyleSheet.create({
-  block: {
-    backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
-    borderWidth: 1, borderColor: COLORS.border,
-    padding: SPACING.md, gap: SPACING.sm,
+  // Freshness chips
+  freshRow: { flexDirection: 'row', gap: SPACING.sm },
+  freshChip: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: RADIUS.md, paddingHorizontal: SPACING.sm + 2, paddingVertical: SPACING.sm,
     ...SHADOW.subtle,
   },
-  labelRow: {
-    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
-    marginBottom: SPACING.xs,
-  },
-  sectionTitle: { color: COLORS.text, fontSize: 14, fontWeight: '800' },
+  freshIcon:  { fontSize: 20 },
+  freshLabel: { color: COLORS.textMuted, fontSize: 10, fontWeight: '600' },
+  freshVal:   { color: COLORS.textSub,   fontSize: 12, fontWeight: '700', marginTop: 1 },
 
-  // Nutrition pills
-  pillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  pill: {
-    alignItems: 'center', backgroundColor: COLORS.surfaceAlt,
-    borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border,
-    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
-    minWidth: 64,
+  // Description
+  desc:     { color: COLORS.textMuted, fontSize: 14, lineHeight: 22 },
+  readMore: {
+    color: COLORS.secondaryDark, fontSize: 14, fontWeight: '600',
+    borderBottomWidth: 1, borderBottomColor: COLORS.borderStrong,
+    alignSelf: 'flex-start', marginTop: SPACING.xs,
   },
-  pillValue: { color: COLORS.textSub, fontSize: 15, fontWeight: '800' },
-  pillLabel: { color: COLORS.textMuted, fontSize: 11, fontWeight: '500', marginTop: 2 },
 
-  // Allergen chips
-  allergenRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  allergenChip: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.warningLight,
-    borderRadius: RADIUS.full,
-    paddingHorizontal: SPACING.sm + SPACING.xs,
-    paddingVertical: SPACING.xs + 2,
-    borderWidth: 1, borderColor: COLORS.warning,
+  // Nutrition
+  nutrGrid: { flexDirection: 'row', gap: SPACING.sm },
+  nutrCell: {
+    flex: 1, alignItems: 'center',
+    backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: RADIUS.md, paddingVertical: SPACING.sm,
   },
-  allergenTxt: { color: COLORS.warning, fontSize: 12, fontWeight: '700' },
-  additionalText: { color: COLORS.textMuted, fontSize: 12, marginTop: 4 },
+  nutrVal:   { color: COLORS.textSub,   fontSize: 16, fontWeight: '800' },
+  nutrUnit:  { color: COLORS.textMuted, fontSize: 10 },
+  nutrLabel: { color: COLORS.textMuted, fontSize: 10, fontWeight: '500', marginTop: 2 },
+
+  // Tags
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  tag: {
+    backgroundColor: COLORS.primaryLight, borderWidth: 1, borderColor: '#FFE082',
+    borderRadius: RADIUS.full, paddingHorizontal: SPACING.sm + SPACING.xs, paddingVertical: SPACING.xs + 2,
+  },
+  tagWarn:    { backgroundColor: COLORS.warningLight, borderColor: COLORS.warning },
+  tagTxt:     { color: COLORS.secondaryDark, fontSize: 12, fontWeight: '600' },
+  tagTxtWarn: { color: COLORS.warning },
+
+  // Info tiles
+  infoTiles: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
+  infoTile: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: RADIUS.md, padding: SPACING.sm + 2,
+    ...SHADOW.subtle,
+  },
+  infoTileIcon:  { fontSize: 18 },
+  infoTileLabel: { color: COLORS.textMuted, fontSize: 10, fontWeight: '600' },
+  infoTileVal:   { color: COLORS.textSub,   fontSize: 12, fontWeight: '700', marginTop: 1 },
 });
 
 // ─── RELATED CARD STYLES ──────────────────────────────────────────────────────────
 const relS = StyleSheet.create({
   card: {
-    width: 140, backgroundColor: COLORS.surface,
+    width: 132, backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg, overflow: 'hidden',
     borderWidth: 1, borderColor: COLORS.border,
-    // ...SHADOW.card,
   },
-  img:     { width: 140, height: 100 },
-  imgGrad: { position: 'absolute', top: 50, left: 0, right: 0, height: 50 },
-  info: {
-    padding: SPACING.sm, gap: SPACING.xs,
-    backgroundColor: COLORS.surface,
+  imgWrap:     { height: 96, position: 'relative' },
+  img:         { width: '100%', height: '100%' },
+  ratingBadge: {
+    position: 'absolute', top: 6, left: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: 'rgba(250,247,242,0.92)',
+    borderRadius: RADIUS.full, paddingHorizontal: 7, paddingVertical: 3,
   },
-  name:      { color: COLORS.text, fontSize: 12, fontWeight: '600', lineHeight: 17 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
-  rating:    { color: COLORS.textMuted, fontSize: 11 },
-  price:     { color: COLORS.textSub, fontSize: 14, fontWeight: '800' },
+  ratingTxt: { color: COLORS.secondaryDark, fontSize: 11, fontWeight: '700' },
+  info:  { padding: SPACING.sm },
+  name:  { color: COLORS.text, fontSize: 12, fontWeight: '600', lineHeight: 17, marginBottom: 4 },
+  price: { color: COLORS.textSub, fontSize: 14, fontWeight: '800' },
+  unit:  { color: COLORS.textMuted, fontSize: 10 },
 });
 
-// ─── BOTTOM BAR STYLES — fully redesigned ─────────────────────────────────────────
+// ─── BOTTOM BAR STYLES ────────────────────────────────────────────────────────────
 const btmS = StyleSheet.create({
   wrapper: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.xl,
   },
-  scrim: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-  },
-
-  // Single unified card
+  scrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   card: {
     flexDirection: 'row',
     backgroundColor: COLORS.surface,
@@ -879,72 +999,35 @@ const btmS = StyleSheet.create({
     overflow: 'hidden',
     ...SHADOW.float,
   },
-
-  // Left stepper block
   stepperBlock: {
-    width: 130,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.md,
-    gap: SPACING.xs,
+    width: 130, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: SPACING.md, gap: SPACING.xs,
   },
-  stepperHeading: {
-    color: COLORS.textMuted, fontSize: 11,
-    fontWeight: '700', letterSpacing: 0.8,
-    textTransform: 'uppercase',
+  stepperLbl: {
+    color: COLORS.textMuted, fontSize: 10, fontWeight: '700',
+    letterSpacing: 0.9, textTransform: 'uppercase',
   },
-  stepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  stepTap: {
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+  stepBtn: {
     width: 36, height: 36, borderRadius: RADIUS.md,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  stepMinus: {
     backgroundColor: COLORS.surfaceAlt,
     borderWidth: 1, borderColor: COLORS.border,
-    alignItems: 'center', justifyContent: 'center',
   },
-  stepTapDisabled: {
-    opacity: 0.4,
-  },
-  stepTapPlus: {
-    width: 36, height: 36, borderRadius: RADIUS.md,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  qtyBox: {
-    width: 36, alignItems: 'center',
-  },
-  qtyNum: {
-    color: COLORS.text, fontSize: 20, fontWeight: '900',
-  },
-
-  // Vertical divider
-  vRule: {
-    width: 1, backgroundColor: COLORS.border,
-    marginVertical: SPACING.md,
-  },
-
-  // Right CTA block
+  stepPlus:    { backgroundColor: COLORS.primary },
+  stepDisabled:{ opacity: 0.38 },
+  qtyBox:      { width: 36, alignItems: 'center' },
+  qtyNum:      { color: COLORS.text, fontSize: 22, fontWeight: '900' },
+  vRule:       { width: 1, backgroundColor: COLORS.border, marginVertical: SPACING.md },
   ctaBlock: {
-    flex: 1,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    justifyContent: 'space-between',
-    gap: SPACING.sm,
+    flex: 1, paddingHorizontal: SPACING.md, paddingVertical: SPACING.md,
+    justifyContent: 'space-between', gap: SPACING.sm,
   },
-  totalRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-  },
-  totalLabel: {
-    color: COLORS.textMuted, fontSize: 12, fontWeight: '600',
-  },
-  totalAmt: {
-    color: COLORS.text, fontSize: 18, fontWeight: '900',
-  },
-
+  totalRow:  { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  totalLbl:  { color: COLORS.textMuted, fontSize: 12, fontWeight: '600' },
+  totalAmt:  { color: COLORS.text, fontSize: 20, fontWeight: '900' },
   addBtn: {
     height: 48, borderRadius: RADIUS.lg,
     backgroundColor: COLORS.primary,
@@ -952,28 +1035,22 @@ const btmS = StyleSheet.create({
     justifyContent: 'center', gap: SPACING.sm,
     ...SHADOW.card,
   },
-  addBtnSuccess: {
-    backgroundColor: COLORS.success,
-  },
-  addBtnDisabled: {
-    opacity: 0.4,
-  },
-  addBtnTxt: {
-    color: COLORS.text, fontSize: 15, fontWeight: '800',
-  },
-  addBtnTxtSuccess: {
-    color: COLORS.surface,
-  },
+  addBtnSuccess:  { backgroundColor: COLORS.success },
+  addBtnDisabled: { opacity: 0.38 },
+  addBtnTxt:      { color: COLORS.dark, fontSize: 15, fontWeight: '800' },
+  addBtnTxtSuccess: { color: COLORS.surface },
 });
 
 // ─── CONFETTI STYLES ──────────────────────────────────────────────────────────────
 const confS = StyleSheet.create({
   container: {
-    position: 'absolute', bottom: 120,
+    position: 'absolute', bottom: 130,
     left: W / 2 - SPACING.sm, width: SPACING.md, height: SPACING.md,
   },
   particle: {
-    position: 'absolute', width: SPACING.sm + SPACING.xs,
-    height: SPACING.sm + SPACING.xs, borderRadius: RADIUS.full,
+    position: 'absolute',
+    width: SPACING.sm + SPACING.xs + 2,
+    height: SPACING.sm + SPACING.xs + 2,
+    borderRadius: RADIUS.full,
   },
 });

@@ -5,10 +5,10 @@ import {
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming,
-  withSequence, useAnimatedGestureHandler, runOnJS,
+  withSequence, runOnJS,
   Layout, FadeOut, SlideOutLeft,
 } from 'react-native-reanimated';
-import { PanGestureHandler } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -147,12 +147,12 @@ const CartItem = ({ item, onRemove, onUpdateQty, index }) => {
     itemOp.value = withTiming(1, { duration: ANIM.duration.normal, delay });
   }, []);
 
-  const gestureHandler = useAnimatedGestureHandler({
-    onActive: (e) => {
+  const gestureHandler = Gesture.Pan()
+    .onUpdate((e) => {
       translateX.value = Math.min(0, e.translationX);
       deleteOp.value   = Math.min(1, Math.abs(e.translationX) / 100);
-    },
-    onEnd: (e) => {
+    })
+    .onEnd((e) => {
       if (e.translationX < DELETE_THRESHOLD) {
         translateX.value = withTiming(-W, { duration: 250 });
         itemHeight.value = withTiming(0,  { duration: 250 });
@@ -164,8 +164,7 @@ const CartItem = ({ item, onRemove, onUpdateQty, index }) => {
         translateX.value = withSpring(0, ANIM.spring);
         deleteOp.value   = withTiming(0, { duration: 200 });
       }
-    },
-  });
+    });
 
   const rowStyle    = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] }));
   const wrapStyle   = useAnimatedStyle(() => ({ height: itemHeight.value, opacity: itemOp.value }));
@@ -192,7 +191,7 @@ const CartItem = ({ item, onRemove, onUpdateQty, index }) => {
         </View>
       </Animated.View>
 
-      <PanGestureHandler onGestureEvent={gestureHandler}>
+      <GestureDetector gesture={gestureHandler}>
         <Animated.View style={[styles.cartItem, rowStyle]}>
           <Image
             source={{ uri: item.image || `https://picsum.photos/seed/${item.id}/100/100` }}
@@ -223,7 +222,7 @@ const CartItem = ({ item, onRemove, onUpdateQty, index }) => {
             </View>
           </View>
         </Animated.View>
-      </PanGestureHandler>
+      </GestureDetector>
     </Animated.View>
   );
 };

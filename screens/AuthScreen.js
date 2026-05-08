@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { FONTS } from '../constants/fonts';
 import {
   View, Text, TextInput, TouchableOpacity,
@@ -10,12 +10,12 @@ import Animated, {
   withSequence, Easing, runOnJS, interpolate,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
-// ─── CONSTANTS ────────────────────────────────────────────────────────────────────
-const { width: W, height: H } = Dimensions.get('window');
+// ─── BRAND CONSTANTS ──────────────────────────────────────────────────────────────
+const { width: W } = Dimensions.get('window');
 
 const COLORS = {
   primary:        '#FFC107',
@@ -33,45 +33,49 @@ const COLORS = {
   border:         '#E8DCC8',
   borderStrong:   '#B8975A',
   dark:           '#3D2B00',
-  darkMid:        '#5C3D00',
   success:        '#2E7D32',
   successLight:   '#E8F5E9',
+  successBorder:  '#B8DDB8',
   error:          '#C62828',
   errorLight:     '#FDECEA',
-  info:           '#1565C0',
-  infoLight:      '#E3F2FD',
   warning:        '#E65100',
-  warningLight:   '#FBE9E7',
 };
 
 const SPACING = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 };
-const RADIUS  = { sm: 8, md: 12, lg: 20, xl: 28, full: 999 };
+const RADIUS  = { sm: 8, md: 12, lg: 16, xl: 24, xxl: 28, full: 999 };
 const SHADOW  = {
   card: {
     shadowColor: '#3D2B00',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.09,
+    shadowRadius: 16,
+    elevation: 5,
   },
   cardStrong: {
     shadowColor: '#1A0F00',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.10,
-    shadowRadius: 20,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.11,
+    shadowRadius: 24,
+    elevation: 10,
   },
   float: {
     shadowColor: '#FFC107',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.30,
+    shadowRadius: 14,
+    elevation: 8,
   },
   input: {
     shadowColor: '#FFC107',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.14,
+    shadowOpacity: 0,
+    shadowRadius: 8,
+    elevation: 0,
+  },
+  inputFocused: {
+    shadowColor: '#FFC107',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.18,
     shadowRadius: 8,
     elevation: 0,
   },
@@ -80,7 +84,6 @@ const ANIM = {
   spring:     { damping: 16, stiffness: 160 },
   springFast: { damping: 12, stiffness: 200 },
   springSlow: { damping: 20, stiffness: 120 },
-  duration:   { fast: 150, normal: 280, slow: 450 },
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────────
@@ -89,97 +92,105 @@ const isValidPhone = (v) => v.replace(/\D/g, '').length >= 8;
 
 // ─── usePress HOOK ────────────────────────────────────────────────────────────────
 const usePress = () => {
-  const scale = useSharedValue(1);
+  const scale    = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const onPressIn  = () => { scale.value = withSpring(0.95, ANIM.springFast); };
-  const onPressOut = () => { scale.value = withSpring(1,    ANIM.spring); };
+  const onPressOut = () => { scale.value = withSpring(1,    ANIM.spring);     };
   return { animStyle, onPressIn, onPressOut };
 };
+
+// ─── TRUST PILL ───────────────────────────────────────────────────────────────────
+const TrustPill = ({ icon, label, dot }) => (
+  <View style={s.trustPill}>
+    {dot && <View style={s.trustDot} />}
+    {icon && <Text style={s.trustIcon}>{icon}</Text>}
+    <Text style={s.trustTxt}>{label}</Text>
+  </View>
+);
 
 // ─── FIELD COMPONENT ──────────────────────────────────────────────────────────────
 const Field = ({
   label, value, onChangeText, secureText,
   placeholder, validate, keyboardType, prefix, icon, dimmed,
 }) => {
-  const [shown, setShown]     = useState(false);
+  const [shown,   setShown]   = useState(false);
   const [focused, setFocused] = useState(false);
 
   const isValid   = value.length > 0 && (validate ? validate(value) : value.length >= 2);
   const isInvalid = value.length > 0 && !(validate ? validate(value) : value.length >= 2);
 
-  const focusAnim = useSharedValue(0);
-  const shakeAnim = useSharedValue(0);
+  const focusVal  = useSharedValue(0);
+  const shakeVal  = useSharedValue(0);
 
   const handleFocus = () => {
     setFocused(true);
-    focusAnim.value = withTiming(1, { duration: 200 });
+    focusVal.value = withTiming(1, { duration: 200 });
   };
+
   const handleBlur = () => {
     setFocused(false);
-    focusAnim.value = withTiming(0, { duration: 200 });
+    focusVal.value = withTiming(0, { duration: 200 });
     if (isInvalid) {
-      shakeAnim.value = withSequence(
-        withTiming(-4, { duration: 60 }),
-        withTiming( 4, { duration: 60 }),
-        withTiming(-3, { duration: 60 }),
-        withTiming( 3, { duration: 60 }),
-        withTiming( 0, { duration: 60 }),
+      shakeVal.value = withSequence(
+        withTiming(-5, { duration: 55 }),
+        withTiming( 5, { duration: 55 }),
+        withTiming(-4, { duration: 55 }),
+        withTiming( 4, { duration: 55 }),
+        withTiming( 0, { duration: 55 }),
       );
     }
   };
 
-  const wrapAnim = useAnimatedStyle(() => ({
-    transform: [{ translateX: shakeAnim.value }],
-    borderColor: isValid
-      ? COLORS.success
+  const wrapAnim = useAnimatedStyle(() => {
+    const borderColor = isValid
+      ? "#11111110"
       : isInvalid
       ? COLORS.error
-      : focused
+      : focusVal.value > 0.5
       ? COLORS.borderStrong
-      : COLORS.border,
-    backgroundColor: isValid
-      ? COLORS.successLight
+      : COLORS.border;
+
+    const backgroundColor = isValid
+      ? '#eee'
       : isInvalid
       ? COLORS.errorLight
-      : focused
+      : focusVal.value > 0.5
       ? COLORS.surface
-      : COLORS.surfaceAlt,
-    shadowOpacity: focused ? 0.14 : 0,
-  }));
+      : COLORS.surfaceAlt;
+
+    const shadowOpacity = focusVal.value * 0.18;
+
+    return {
+      borderColor,
+      backgroundColor,
+      transform: [{ translateX: shakeVal.value }],
+      shadowOpacity,
+    };
+  });
 
   const labelAnim = useAnimatedStyle(() => ({
     color: isValid
-      ? COLORS.success
+      ? "#11111180"
       : isInvalid
       ? COLORS.error
-      : interpolate(focusAnim.value, [0, 1], [0, 1]) === 1
+      : focusVal.value > 0.5
       ? COLORS.borderStrong
       : COLORS.textSub,
   }));
 
   return (
     <View style={f.wrap}>
-      {/* Label row */}
       <View style={f.labelRow}>
         <Animated.Text style={[f.label, labelAnim]}>{label}</Animated.Text>
-        {/* Validity micro-badge */}
-        {isValid && (
-          <View style={[f.statusBadge, { backgroundColor: COLORS.successLight }]}>
-            <Ionicons name="checkmark-circle" size={10} color={COLORS.success} />
-            <Text style={[f.statusTxt, { color: COLORS.success }]}>OK</Text>
-          </View>
-        )}
         {isInvalid && (
-          <View style={[f.statusBadge, { backgroundColor: COLORS.errorLight }]}>
+          <View style={[f.badge, { backgroundColor: COLORS.errorLight }]}>
             <Ionicons name="alert-circle" size={10} color={COLORS.error} />
-            <Text style={[f.statusTxt, { color: COLORS.error }]}>Check</Text>
+            <Text style={[f.badgeTxt, { color: COLORS.error }]}>Check</Text>
           </View>
-        )}
+        )} 
       </View>
 
-      {/* Input row */}
       <Animated.View style={[f.inputWrap, wrapAnim, SHADOW.input]}>
-        {/* Left icon */}
         {icon && (
           <View style={f.iconWrap}>
             <Ionicons
@@ -190,29 +201,29 @@ const Field = ({
           </View>
         )}
 
-        {/* Country prefix */}
-        {prefix ? (
+        {prefix && (
           <View style={f.prefixWrap}>
             <Text style={f.prefix}>{prefix}</Text>
             <View style={f.prefixDivider} />
           </View>
-        ) : null}
+        )}
 
         <TextInput
           style={[f.input, dimmed && { color: COLORS.textMuted }]}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor={COLORS.textMuted + '99'}
+          placeholderTextColor={COLORS.textMuted + '88'}
           secureTextEntry={secureText && !shown}
           keyboardType={keyboardType || 'default'}
           onFocus={handleFocus}
           onBlur={handleBlur}
           autoCapitalize="none"
+          autoCorrect={false}
         />
 
         {secureText && (
-          <TouchableOpacity onPress={() => setShown((p) => !p)} style={f.eye}>
+          <TouchableOpacity onPress={() => setShown(p => !p)} style={f.eyeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons
               name={shown ? 'eye-off-outline' : 'eye-outline'}
               size={17}
@@ -225,16 +236,31 @@ const Field = ({
   );
 };
 
+// ─── LOGO MARK ────────────────────────────────────────────────────────────────────
+const LogoMark = () => (
+  <View style={s.logoMarkWrap}>
+    <LinearGradient
+      colors={[COLORS.primary, COLORS.primaryDark]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={s.logoGrad}
+    >
+      <Text style={s.logoLetter}>Q</Text>
+    </LinearGradient>
+  </View>
+);
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────────
 export default function AuthScreen({ navigation }) {
+  const insets      = useSafeAreaInsets();
   const [tab, setTab]         = useState('login');
   const [loading, setLoading] = useState(false);
 
-  // Login fields — pre-filled demo credentials
-  const [phone, setPhone]               = useState('55123456');
-  const [pass,  setPass]                = useState('Demo@1234');
-  const [phoneDimmed, setPhoneDimmed]   = useState(true);
-  const [passDimmed,  setPassDimmed]    = useState(true);
+  // Login fields
+  const [phone,       setPhone]       = useState('55123456');
+  const [pass,        setPass]        = useState('Demo@1234');
+  const [phoneDimmed, setPhoneDimmed] = useState(true);
+  const [passDimmed,  setPassDimmed]  = useState(true);
 
   // Register fields
   const [name,   setName]   = useState('');
@@ -250,20 +276,30 @@ export default function AuthScreen({ navigation }) {
   const formX    = useSharedValue(0);
   const screenOp = useSharedValue(1);
   const screenSc = useSharedValue(1);
+  const heroOp   = useSharedValue(1);
   const btnPress = usePress();
 
-  const switchTab = (t) => {
+  const switchTab = useCallback((t) => {
     if (t === tab) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    formOp.value = withTiming(0, { duration: 130 }, () => {
+
+    // Fade hero text
+    heroOp.value = withTiming(0, { duration: 110 }, () => {
       runOnJS(setTab)(t);
-      formX.value  = t === 'register' ? 28 : -28;
-      formOp.value = withTiming(1, { duration: ANIM.duration.normal });
+      heroOp.value = withTiming(1, { duration: 220 });
+    });
+
+    // Slide form
+    formOp.value = withTiming(0, { duration: 120 }, () => {
+      formX.value  = t === 'register' ? 30 : -30;
+      formOp.value = withTiming(1, { duration: 260 });
       formX.value  = withSpring(0, ANIM.spring);
     });
-    tabX.value = withSpring(t === 'login' ? 0 : 1, ANIM.spring);
-  };
 
+    tabX.value = withSpring(t === 'login' ? 0 : 1, ANIM.spring);
+  }, [tab]);
+
+  // Tab indicator slide
   const indicatorStyle = useAnimatedStyle(() => {
     const p    = SPACING.xs;
     const btnW = trackW.value > 0
@@ -280,6 +316,10 @@ export default function AuthScreen({ navigation }) {
     transform: [{ translateX: formX.value }],
   }));
 
+  const heroStyle = useAnimatedStyle(() => ({
+    opacity: heroOp.value,
+  }));
+
   const wrapStyle = useAnimatedStyle(() => ({
     opacity:   screenOp.value,
     transform: [{ scale: screenSc.value }],
@@ -292,91 +332,103 @@ export default function AuthScreen({ navigation }) {
   const handleAuth = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
+    await new Promise(r => setTimeout(r, 1200));
     setLoading(false);
-    screenSc.value = withTiming(1.06, { duration: 380, easing: Easing.out(Easing.quad) });
-    screenOp.value = withTiming(0,    { duration: 380, easing: Easing.in(Easing.quad) }, (fin) => {
+    screenSc.value = withTiming(1.06, { duration: 360, easing: Easing.out(Easing.quad) });
+    screenOp.value = withTiming(0, { duration: 360, easing: Easing.in(Easing.quad) }, (fin) => {
       if (fin) runOnJS(goToMain)();
     });
   };
 
+  const isLogin = tab === 'login';
+
   return (
-    <Animated.View style={[styles.root, wrapStyle]}>
-      {/* ── Warm parchment background gradient ── */}
+    <Animated.View style={[s.root, wrapStyle]}>
+
+      {/* ── Background gradient ── */}
       <LinearGradient
         colors={[COLORS.bg, '#F5EFE4', COLORS.bg]}
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* ── Decorative arc — top right, very subtle amber blush ── */}
-      <View style={styles.arcTopRight} pointerEvents="none">
+      {/* ── Decorative blobs ── */}
+      <View style={s.blobTR} pointerEvents="none">
         <LinearGradient
-          colors={[COLORS.primary + '1A', COLORS.primary + '00']}
+          colors={[COLORS.primary + '22', COLORS.primary + '00']}
           style={{ flex: 1, borderRadius: RADIUS.full }}
         />
       </View>
-
-      {/* ── Decorative circle — bottom left, warm sepia ── */}
-      <View style={styles.arcBottomLeft} pointerEvents="none">
+      <View style={s.blobBL} pointerEvents="none">
         <LinearGradient
-          colors={[COLORS.secondary + '14', COLORS.secondary + '00']}
+          colors={[COLORS.secondary + '18', COLORS.secondary + '00']}
           style={{ flex: 1, borderRadius: RADIUS.full }}
         />
       </View>
- 
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[s.scroll, { paddingTop: insets.top + SPACING.lg }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* ── Welcome block ── */}
-          <View style={styles.welcomeBlock}>
-            <Text style={styles.welcomeEyebrow}>
-              {tab === 'login' ? 'WELCOME BACK' : 'GET STARTED'}
+
+          {/* ── Brand header ── */}
+          <View style={s.brandRow}>
+            <LogoMark />
+            <View>
+              <Text style={s.brandName}>Quick</Text>
+              <Text style={s.brandSub}>Fresh Grocery Delivery</Text>
+            </View>
+          </View>
+
+          {/* ── Welcome hero ── */}
+          <Animated.View style={[s.hero, heroStyle]}>
+            <Text style={s.eyebrow}>
+              {isLogin ? 'WELCOME BACK' : 'GET STARTED'}
             </Text>
-            <Text style={styles.welcomeHead}>
-              {tab === 'login' ? 'Sign in to\nyour account' : 'Create your\naccount'}
+            <Text style={s.headline}>
+              {isLogin ? 'Sign in to your ' : 'Create your '}
+              <Text style={s.headlineItalic}> {isLogin ? 'account' : 'account'} </Text>
             </Text>
-            <Text style={styles.welcomeSub}>
-              {tab === 'login'
-                ? 'Continue to your favourite orders'
+            <Text style={s.subhead}>
+              {isLogin
+                ? 'Continue to your favourite fresh orders'
                 : 'Join thousands of happy customers'}
             </Text>
  
-          </View>
+          </Animated.View>
 
           {/* ── Card ── */}
-          <View style={styles.card}>
+          <View style={s.card}>
 
-            {/* ─ Decorative card inner top rule ─ */}
-            <View style={styles.cardRule} />
+            {/* Card top drag handle */}
+            <View style={s.cardHandle} />
 
-            {/* ─ Tab toggle ─ */}
+            {/* ── Tab toggle ── */}
             <View
-              style={styles.tabTrack}
-              onLayout={(e) => { trackW.value = e.nativeEvent.layout.width; }}
+              style={s.tabTrack}
+              onLayout={e => { trackW.value = e.nativeEvent.layout.width; }}
             >
-              <Animated.View style={[styles.tabIndicator, indicatorStyle]} />
-              {['login', 'register'].map((t) => (
+              <Animated.View style={[s.tabIndicator, indicatorStyle]} />
+
+              {(['login', 'register']).map(t => (
                 <TouchableOpacity
                   key={t}
-                  style={styles.tabBtn}
+                  style={s.tabBtn}
                   onPress={() => switchTab(t)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.75}
                 >
-                  <View style={styles.tabInner}>
+                  <View style={s.tabInner}>
                     <Ionicons
                       name={t === 'login' ? 'log-in-outline' : 'person-add-outline'}
                       size={14}
                       color={tab === t ? COLORS.text : COLORS.textMuted}
                     />
-                    <Text style={[styles.tabTxt, tab === t && styles.tabTxtActive]}>
+                    <Text style={[s.tabTxt, tab === t && s.tabTxtActive]}>
                       {t === 'login' ? 'Sign In' : 'Register'}
                     </Text>
                   </View>
@@ -384,14 +436,14 @@ export default function AuthScreen({ navigation }) {
               ))}
             </View>
 
-            {/* ─ Form ─ */}
-            <Animated.View style={[styles.form, formStyle]}>
-              {tab === 'login' ? (
+            {/* ── Form fields ── */}
+            <Animated.View style={[s.form, formStyle]}>
+              {isLogin ? (
                 <>
                   <Field
                     label="Phone Number"
                     value={phone}
-                    onChangeText={(v) => { setPhone(v); setPhoneDimmed(false); }}
+                    onChangeText={v => { setPhone(v); setPhoneDimmed(false); }}
                     placeholder="5xxxxxxx"
                     validate={isValidPhone}
                     keyboardType="phone-pad"
@@ -402,14 +454,14 @@ export default function AuthScreen({ navigation }) {
                   <Field
                     label="Password"
                     value={pass}
-                    onChangeText={(v) => { setPass(v); setPassDimmed(false); }}
+                    onChangeText={v => { setPass(v); setPassDimmed(false); }}
                     placeholder="Enter your password"
                     secureText
                     icon="lock-closed-outline"
                     dimmed={passDimmed}
                   />
-                  <TouchableOpacity style={styles.forgotWrap} activeOpacity={0.7}>
-                    <Text style={styles.forgotTxt}>Forgot Password?</Text>
+                  <TouchableOpacity style={s.forgotRow} activeOpacity={0.7}>
+                    <Text style={s.forgotTxt}>Forgot Password?</Text>
                     <Ionicons name="chevron-forward" size={13} color={COLORS.secondary} />
                   </TouchableOpacity>
                 </>
@@ -455,15 +507,15 @@ export default function AuthScreen({ navigation }) {
                     onChangeText={setRConf}
                     placeholder="Repeat your password"
                     secureText
-                    validate={(v) => v === rPass && v.length >= 6}
+                    validate={v => v === rPass && v.length >= 6}
                     icon="shield-checkmark-outline"
                   />
                 </>
               )}
             </Animated.View>
 
-            {/* ─ CTA button ─ */}
-            <Animated.View style={[styles.ctaBtnWrap, btnPress.animStyle]}>
+            {/* ── CTA Button ── */}
+            <Animated.View style={[s.ctaWrap, btnPress.animStyle]}>
               <TouchableOpacity
                 onPress={handleAuth}
                 onPressIn={btnPress.onPressIn}
@@ -475,22 +527,22 @@ export default function AuthScreen({ navigation }) {
                   colors={[COLORS.primary, COLORS.primaryDark]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
-                  style={[styles.ctaBtn, SHADOW.float]}
+                  style={[s.ctaBtn, SHADOW.float]}
                 >
                   {loading ? (
-                    <View style={styles.ctaLoadingRow}>
-                      <ActivityIndicator color={COLORS.text} size="small" />
-                      <Text style={styles.ctaTxt}>
-                        {tab === 'login' ? 'Signing in…' : 'Creating account…'}
+                    <View style={s.ctaRow}>
+                      <ActivityIndicator color={COLORS.dark} size="small" />
+                      <Text style={s.ctaTxt}>
+                        {isLogin ? 'Signing in…' : 'Creating account…'}
                       </Text>
                     </View>
                   ) : (
-                    <View style={styles.ctaInner}>
-                      <Text style={styles.ctaTxt}>
-                        {tab === 'login' ? 'Sign In' : 'Create Account'}
+                    <View style={s.ctaRow}>
+                      <Text style={s.ctaTxt}>
+                        {isLogin ? 'Sign In' : 'Create Account'}
                       </Text>
-                      <View style={styles.ctaIconBubble}>
-                        <Ionicons name="arrow-forward" size={15} color={COLORS.text} />
+                      <View style={s.ctaArrow}>
+                        <Ionicons name="arrow-forward" size={16} color={COLORS.dark} />
                       </View>
                     </View>
                   )}
@@ -498,156 +550,157 @@ export default function AuthScreen({ navigation }) {
               </TouchableOpacity>
             </Animated.View>
 
-            {/* ─ Divider ─ */}
-            <View style={styles.divider}>
-              <View style={styles.divLine} />
-              <Text style={styles.divTxt}>or continue with</Text>
-              <View style={styles.divLine} />
+            {/* ── OR divider ── */}
+            <View style={s.divRow}>
+              <View style={s.divLine} />
+              <Text style={s.divTxt}>or continue with</Text>
+              <View style={s.divLine} />
             </View>
 
-            {/* ─ Social buttons ─ */}
-            <View style={styles.socialRow}>
+            {/* ── Social buttons ── */}
+            <View style={s.socialRow}>
               {[
                 { label: 'Google', icon: 'logo-google' },
                 { label: 'Apple',  icon: 'logo-apple'  },
-              ].map((s) => {
-                const sp = usePress();
-                return (
-                  <Animated.View key={s.label} style={[styles.socialBtnWrap, sp.animStyle]}>
-                    <TouchableOpacity
-                      style={styles.socialBtn}
-                      onPressIn={sp.onPressIn}
-                      onPressOut={sp.onPressOut}
-                      activeOpacity={1}
-                      onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)}
-                    >
-                      <Ionicons name={s.icon} size={18} color={COLORS.textSub} />
-                      <Text style={styles.socialTxt}>{s.label}</Text>
-                    </TouchableOpacity>
-                  </Animated.View>
-                );
-              })}
+              ].map(btn => (
+                <SocialButton key={btn.label} label={btn.label} icon={btn.icon} />
+              ))}
             </View>
+
           </View>
 
           {/* ── Terms ── */}
-          <Text style={styles.terms}>
+          <Text style={s.terms}>
             By continuing, you agree to our{' '}
-            <Text style={styles.termsLink}>Terms of Service</Text>
+            <Text style={s.termsLink}>Terms of Service</Text>
             {' '}and{' '}
-            <Text style={styles.termsLink}>Privacy Policy</Text>
+            <Text style={s.termsLink}>Privacy Policy</Text>
           </Text>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </Animated.View>
   );
 }
 
-// ─── STYLES ───────────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
+// ─── SOCIAL BUTTON (separate so usePress hook is valid) ───────────────────────────
+const SocialButton = ({ label, icon }) => {
+  const press = usePress();
+  return (
+    <Animated.View style={[s.socialBtnWrap, press.animStyle]}>
+      <TouchableOpacity
+        style={s.socialBtn}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
+        activeOpacity={1}
+        onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+      >
+        <Ionicons name={icon} size={18} color={COLORS.textSub} />
+        <Text style={s.socialTxt}>{label}</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+// ─── MAIN STYLES ──────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: COLORS.bg,
   },
 
-  // ── Decorative bg elements ──
-  arcTopRight: {
-    position: 'absolute',
-    top: -90,
-    right: -90,
-    width: 260,
-    height: 260,
-    borderRadius: RADIUS.full,
-  },
-  arcBottomLeft: {
-    position: 'absolute',
-    bottom: -70,
-    left: -70,
-    width: 200,
-    height: 200,
-    borderRadius: RADIUS.full,
-  },
-
-  // ── Top accent bar (dark brand band) ──
-  topAccentBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 56,
-    zIndex: 10,
-    justifyContent: 'flex-end',
-    paddingBottom: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
-  },
-  topBarContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  topBarLogoMark: {
-    width: 28,
-    height: 28,
-    borderRadius: RADIUS.sm,
+  // Blobs
+  blobTR: {
+    position: 'absolute', top: -100, right: -100,
+    width: 300, height: 300, borderRadius: RADIUS.full,
     overflow: 'hidden',
   },
-  topBarLogoGradient: {
+  blobBL: {
+    position: 'absolute', bottom: -80, left: -80,
+    width: 240, height: 240, borderRadius: RADIUS.full,
+    overflow: 'hidden',
+  },
+
+  // Scroll
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.xxl,
+  },
+
+  // Brand row
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm + SPACING.xs,
+    marginBottom: SPACING.lg + SPACING.sm,
+  },
+  logoMarkWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+    ...SHADOW.card,
+  },
+  logoGrad: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  topBarLogoLetter: {
-    fontSize: 15,
+  logoLetter: {
+    fontSize: 22,
     fontFamily: FONTS.black,
-    color: COLORS.text,
-    lineHeight: 18,
+    color: COLORS.dark,
+    lineHeight: 26,
   },
-  topBarWordmark: {
-    fontSize: 17,
+  brandName: {
+    fontSize: 18,
     fontFamily: FONTS.extrabold,
-    color: COLORS.bg,
-    letterSpacing: -0.3,
+    color: COLORS.text,
+    letterSpacing: -0.4,
+    lineHeight: 22,
   },
-
-  // ── Scroll container ──
-  scroll: {
-    flexGrow: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 56 + SPACING.xl,
-    paddingBottom: SPACING.xxl,
-    paddingHorizontal: SPACING.md,
-  },
-
-  // ── Welcome block ──
-  welcomeBlock: {
-    alignSelf: 'stretch',
-    marginBottom: SPACING.lg,
-    paddingHorizontal: SPACING.xs,
-  },
-  welcomeEyebrow: {
-    fontSize: 10,
-    fontFamily: FONTS.semibold,
+  brandSub: {
+    fontSize: 11,
+    fontFamily: FONTS.medium,
     color: COLORS.textMuted,
-    letterSpacing: 1.8,
+    marginTop: 1,
+  },
+
+  // Hero
+  hero: {
+    marginBottom: SPACING.lg,
+  },
+  eyebrow: {
+    fontSize: 10,
+    fontFamily: FONTS.bold,
+    color: COLORS.textMuted,
+    letterSpacing: 2,
     textTransform: 'uppercase',
     marginBottom: SPACING.xs,
   },
-  welcomeHead: {
-    fontSize: 28,
+  headline: {
+    fontSize: 30,
     fontFamily: FONTS.extrabold,
     color: COLORS.text,
-    letterSpacing: -0.5,
-    lineHeight: 34,
+    letterSpacing: -0.6,
+    lineHeight: 36,
     marginBottom: SPACING.xs,
   },
-  welcomeSub: {
+  headlineItalic: {
+    fontFamily: FONTS.extraboldItalic ?? FONTS.extrabold,
+    color: COLORS.secondaryDark,
+    fontStyle: 'italic',
+  },
+  subhead: {
     fontSize: 14,
     fontFamily: FONTS.regular,
     color: COLORS.textMuted,
     lineHeight: 20,
     marginBottom: SPACING.md,
   },
+
+  // Trust pills
   trustRow: {
     flexDirection: 'row',
     gap: SPACING.sm,
@@ -657,46 +710,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
-    paddingHorizontal: SPACING.sm + 2,
-    paddingVertical: SPACING.xs,
     backgroundColor: COLORS.surfaceAlt,
-    borderRadius: RADIUS.full,
     borderWidth: 1,
     borderColor: COLORS.border,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: SPACING.xs,
   },
+  trustDot: {
+    width: 6, height: 6, borderRadius: RADIUS.full,
+    backgroundColor: COLORS.success,
+  },
+  trustIcon: { fontSize: 12 },
   trustTxt: {
     fontSize: 11,
-    fontFamily: FONTS.medium,
-    color: COLORS.textMuted,
+    fontFamily: FONTS.semibold,
+    color: COLORS.textSub,
   },
 
-  // ── Card ──
+  // Card
   card: {
-    width: '100%',
-    maxWidth: 420,
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.xxl,
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.md,
     paddingBottom: SPACING.lg,
     ...SHADOW.cardStrong,
+    marginBottom: SPACING.md,
   },
-  cardRule: {
+  cardHandle: {
     alignSelf: 'center',
-    width: 40,
+    width: 36,
     height: 3,
     borderRadius: RADIUS.full,
     backgroundColor: COLORS.border,
     marginBottom: SPACING.md,
   },
 
-  // ── Tab toggle ──
+  // Tab
   tabTrack: {
     flexDirection: 'row',
     backgroundColor: COLORS.surfaceAlt,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     padding: SPACING.xs,
     marginBottom: SPACING.lg,
     position: 'relative',
@@ -709,7 +766,7 @@ const styles = StyleSheet.create({
     top: SPACING.xs,
     bottom: SPACING.xs,
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
     ...SHADOW.card,
@@ -726,20 +783,20 @@ const styles = StyleSheet.create({
     gap: SPACING.xs + 2,
   },
   tabTxt: {
-    color: COLORS.textMuted,
     fontSize: 14,
     fontFamily: FONTS.semibold,
+    color: COLORS.textMuted,
   },
   tabTxtActive: {
     color: COLORS.text,
   },
 
-  // ── Form ──
+  // Form
   form: {
     gap: SPACING.md,
     marginBottom: SPACING.lg,
   },
-  forgotWrap: {
+  forgotRow: {
     alignSelf: 'flex-end',
     flexDirection: 'row',
     alignItems: 'center',
@@ -747,13 +804,13 @@ const styles = StyleSheet.create({
     marginTop: -SPACING.xs,
   },
   forgotTxt: {
-    color: COLORS.secondary,
     fontSize: 13,
     fontFamily: FONTS.semibold,
+    color: COLORS.secondaryDark,
   },
 
-  // ── CTA ──
-  ctaBtnWrap: {
+  // CTA
+  ctaWrap: {
     marginBottom: SPACING.sm,
   },
   ctaBtn: {
@@ -762,33 +819,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ctaInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  ctaLoadingRow: {
+  ctaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
   },
   ctaTxt: {
-    color: COLORS.text,
     fontSize: 16,
     fontFamily: FONTS.bold,
-    letterSpacing: -0.1,
+    color: COLORS.dark,
+    letterSpacing: -0.2,
   },
-  ctaIconBubble: {
-    width: 30,
-    height: 30,
+  ctaArrow: {
+    width: 32,
+    height: 32,
     borderRadius: RADIUS.full,
-    backgroundColor: 'rgba(26,15,0,0.16)',
+    backgroundColor: 'rgba(26,15,0,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  // ── Divider ──
-  divider: {
+  // OR Divider
+  divRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
@@ -801,51 +853,48 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border,
   },
   divTxt: {
-    color: COLORS.textMuted,
     fontSize: 11,
     fontFamily: FONTS.medium,
+    color: COLORS.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.7,
   },
 
-  // ── Social ──
+  // Social
   socialRow: {
     flexDirection: 'row',
     gap: SPACING.sm,
   },
-  socialBtnWrap: {
-    flex: 1,
-  },
+  socialBtnWrap: { flex: 1 },
   socialBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.sm,
-    height: 48,
+    height: 50,
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.surfaceAlt,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   socialTxt: {
-    color: COLORS.textSub,
     fontSize: 14,
     fontFamily: FONTS.semibold,
+    color: COLORS.textSub,
   },
 
-  // ── Terms ──
+  // Terms
   terms: {
-    color: COLORS.textMuted,
     fontSize: 12,
     fontFamily: FONTS.regular,
+    color: COLORS.textMuted,
     textAlign: 'center',
-    marginTop: SPACING.lg,
     lineHeight: 18,
     paddingHorizontal: SPACING.md,
   },
   termsLink: {
-    color: COLORS.secondary,
     fontFamily: FONTS.semibold,
+    color: COLORS.secondaryDark,
   },
 });
 
@@ -858,39 +907,44 @@ const f = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 3,
+    marginBottom: 4,
   },
   label: {
-    fontSize: 11,
-    fontFamily: FONTS.semibold,
+    fontSize: 10,
+    fontFamily: FONTS.bold,
     textTransform: 'uppercase',
-    letterSpacing: 0.7,
+    letterSpacing: 0.9,
     color: COLORS.textSub,
   },
-  statusBadge: {
+  badge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: RADIUS.full,
   },
-  statusTxt: {
+  badgeTxt: {
     fontSize: 10,
-    fontFamily: FONTS.semibold,
-    letterSpacing: 0.3,
+    fontFamily: FONTS.bold,
+    letterSpacing: 0.2,
   },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: 52,
     borderRadius: RADIUS.md,
     borderWidth: 1.5,
     paddingHorizontal: SPACING.sm,
-    height: 52,
     overflow: 'hidden',
+    // shadow applied via animated style
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 8,
+    elevation: 0,
   },
   iconWrap: {
-    width: 32,
+    width: 30,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -900,9 +954,9 @@ const f = StyleSheet.create({
     marginRight: SPACING.sm,
   },
   prefix: {
-    color: COLORS.textMuted,
     fontSize: 13,
-    fontFamily: FONTS.regular,
+    fontFamily: FONTS.medium,
+    color: COLORS.textMuted,
     marginRight: SPACING.sm,
   },
   prefixDivider: {
@@ -912,12 +966,13 @@ const f = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: COLORS.text,
     fontSize: 15,
     fontFamily: FONTS.medium,
+    color: COLORS.text,
     paddingHorizontal: SPACING.sm,
+    height: '100%',
   },
-  eye: {
+  eyeBtn: {
     paddingLeft: SPACING.sm,
     paddingRight: SPACING.xs,
   },

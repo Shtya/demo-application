@@ -395,7 +395,8 @@ export default function StoreScreen({ navigation, route }) {
         {/* ── Hero cover ────────────────────────────────── */}
         <View style={{ height: COVER_H, overflow: 'hidden' }}>
           <Animated.View style={[{ height: COVER_H + 60 }, coverParallax]}>
-            <Image source={{ uri: s.cover }} style={styles.coverImg} resizeMode='cover' />
+            <Image source={require('../assets/stores/1.jpeg')} style={styles.coverImg} resizeMode='cover' />
+            
             <LinearGradient colors={['transparent', 'rgba(61,43,0,0.40)', 'rgba(61,43,0,0.85)']} style={StyleSheet.absoluteFill} />
           </Animated.View>
 
